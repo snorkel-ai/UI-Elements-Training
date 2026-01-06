@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audit my subscriptions from these statements. Flag duplicates and price increases.</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { margin: 0; padding: 0; background: #f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    #root { min-height: 100vh; }
+    * { box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
+    const { createRoot } = ReactDOM;
+
+    // Conversation data
+    const conversationData = [
+  {
+    "role": "user",
+    "content": "Audit my subscriptions from these statements. Flag duplicates and price increases.",
+    "grading_guidance": {
+      "quality_criteria": [
+        "Recognizes that no statements were provided yet and explicitly asks the user to upload or connect their statements/accounts before proceeding",
+        "Asks 4-6 targeted clarifying questions: source of statements (banks/cards/providers), file formats/date range, currency, whether to include business vs personal, definition of 'duplicate' (same service across multiple merchants/accounts) and price-increase criteria (threshold and lookback period)",
+        "Explains what data points are needed from the statements to perform the audit (merchant name, transaction descriptors, dates, amounts, frequency) and how duplicates and price increases will be detected",
+        "Avoids making assumptions or showing any provisional tables/analytics; does not fabricate detected subscriptions or price changes without data",
+        "Sets expectations for the output once data is provided (a subscription audit table with duplicates flagged and a price-change timeline, savings calculator, and cancel links), while deferring visualization until after ingestion"
+      ],
+      "expected_components": []
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I can do that. To proceed, please share the statements or specify how to fetch them, plus a few preferences so I can flag duplicates and price increases accurately:\n\nData sources and access\n- How will you provide the statements? (Upload PDFs, CSVs, or paste text.)\n- Which accounts/cards should I include? (Bank/credit card names and last 4 digits, if multiple.)\n- Time range to audit? (e.g., last 12 months)\n- Currency to report in? (e.g., USD)\n\nParsing preferences\n- Include both monthly and annual subscriptions (annuals normalized to monthly)?\n- Include taxes/fees in the subscription cost, or base price only?\n- Treat Apple/Google/PayPal aggregator charges as subscriptions if descriptors match? (Y/N)\n\nDuplicates criteria\n- What counts as a duplicate for you?\n  \u2022 Same provider, multiple plans (e.g., Spotify Individual + Family)\n  \u2022 Overlapping services across providers (e.g., YouTube Premium vs. YT Music)\n  \u2022 Same service via different billing channels (e.g., Hulu via Apple and direct)\n- If found, should I prefer the lowest-cost plan or the one with higher features?\n\nPrice increase rules\n- What window counts as \u201crecent\u201d for the badge? (e.g., last 6 months)\n- Minimum change to flag? (e.g., \u22655% or \u2265$1)\n\nUsage estimation\n- OK to infer usage from transaction recency/frequency only, or do you have actual usage logs to provide?\n- Any subscriptions you already know are low-use?\n\nOutput and cancellations\n- Include cancel links/domains when detectable from descriptors? (display-only)\n- Show a savings calculator for 1, 3, and 12 months?\n\nIf you\u2019re ready, please upload or paste your statements (PDF/CSV/text). For CSV, headers like date, description, amount, currency help. For PDFs/text, ensure transaction date, merchant/descriptor, and amount are visible."
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": "Uploading two CSVs now: Chase Visa \u20221234 and Amex \u20225678, last 12 months, USD. Please include annual subs normalized monthly and taxes; treat Apple/Google/PayPal as subs; flag duplicates for same service across channels and overlapping providers, prefer lowest-cost plan; \u201crecent\u201d = last 6 months; flag \u22655% or \u2265$1 increases; estimate usage from recency/frequency (Paramount+ is low-use); include cancel links and a savings calculator for 1, 3, and 12 months.",
+    "grading_guidance": {
+      "quality_criteria": [
+        "Explicitly acknowledges the two uploaded CSV sources (Chase Visa \u20221234 and Amex \u20225678), the 12-month window, and USD, and confirms it will parse them before producing results (no fabricated data).",
+        "Normalizes annual subscriptions to monthly amounts and includes taxes in the displayed monthly total for each subscription.",
+        "Treats Apple/Google/PayPal transactions as subscription channels, consolidates to the underlying service where possible, and uses this to detect duplicates and overlapping providers while recommending the lowest-cost option to keep.",
+        "Uses the user's definition of \"recent\" as the last 6 months and flags price increases meeting the threshold (>= 5% or >= $1), showing the last increase badge/date per service.",
+        "Generates usage estimates from recency/frequency of charges and applies the user's hint that Paramount+ is low-use (e.g., explicitly marked as such), and includes cancel links and savings projections for 1, 3, and 12 months for potential cancellations."
+      ],
+      "expected_components": [
+        "SubscriptionAuditTable showing each identified subscription with normalized monthly cost (taxes included), last increase badge/date, and a usage estimate, plus inline cancel links (MUST-HAVE: primary view the user expects for auditing and actioning subscriptions).",
+        "DuplicateSuggestionList displaying duplicates across channels and overlapping providers with a clear recommendation to keep the lowest-cost plan (MUST-HAVE: user explicitly requested deduping and preference for lowest cost).",
+        "SavingsCalculatorPopover for each subscription to estimate savings over 1, 3, and 12 months if canceled (MUST-HAVE: user explicitly requested a savings calculator for these time horizons)."
+      ]
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Great\u2014your preferences are set. I\u2019m ready to audit for duplicates and price increases across Chase Visa \u20221234 and Amex \u20225678 for the last 12 months in USD, including annual subs normalized monthly, taxes, and aggregator charges, using your duplicate and price-increase rules, and estimating usage (with Paramount+ marked low-use). Please attach the two CSV files here or paste their contents so I can parse them. If pasting, include headers and rows with at least: date, description/merchant, amount (signed), and currency. Optional but helpful columns: category, transaction type, and memo. As soon as I have the data, I\u2019ll generate the audit table and savings calculator with cancel links and a price-change timeline."
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": "Here are the two CSVs.\n\nChase_Visa_1234.csv\ndate,description,amount,currency\n2024-12-15,DROPBOX*PLAN RENEWAL - Annual,-119.88,USD\n2025-01-20,NETFLIX.COM,-14.99,USD\n2025-02-20,NETFLIX.COM,-14.99,USD\n2025-03-20,NETFLIX.COM,-14.99,USD\n2025-04-20,NETFLIX.COM,-14.99,USD\n2025-05-20,NETFLIX.COM,-14.99,USD\n2025-06-20,NETFLIX.COM,-15.49,USD\n2025-07-20,NETFLIX.COM,-15.49,USD\n2025-08-20,NETFLIX.COM,-15.49,USD\n2025-09-20,NETFLIX.COM,-15.49,USD\n2025-10-20,NETFLIX.COM,-15.49,USD\n2025-11-20,NETFLIX.COM,-17.99,USD\n2025-12-15,DROPBOX*PLAN RENEWAL - Annual,-143.88,USD\n2025-01-01,SPOTIFY USA,-10.99,USD\n2025-02-01,SPOTIFY USA,-10.99,USD\n2025-03-01,SPOTIFY USA,-10.99,USD\n2025-04-01,SPOTIFY USA,-10.99,USD\n2025-05-01,SPOTIFY USA,-10.99,USD\n2025-06-01,SPOTIFY USA,-10.99,USD\n2025-07-01,SPOTIFY USA,-10.99,USD\n2025-08-01,SPOTIFY USA,-11.99,USD\n2025-09-01,SPOTIFY USA,-11.99,USD\n2025-10-01,SPOTIFY USA,-11.99,USD\n2025-11-01,SPOTIFY USA,-11.99,USD\n2025-12-01,SPOTIFY USA,-11.99,USD\n2025-01-15,APPLE.COM/BILL iCloud+ 200GB,-2.99,USD\n2025-02-15,APPLE.COM/BILL iCloud+ 200GB,-2.99,USD\n2025-03-15,APPLE.COM/BILL iCloud+ 200GB,-2.99,USD\n2025-04-15,APPLE.COM/BILL iCloud+ 200GB,-2.99,USD\n2025-05-15,APPLE.COM/BILL iCloud+ 200GB,-2.99,USD\n2025-06-15,APPLE.COM/BILL iCloud+ 200GB,-2.99,USD\n2025-07-15,APPLE.COM/BILL iCloud+ 200GB,-2.99,USD\n2025-08-15,APPLE.COM/BILL iCloud+ 200GB,-2.99,USD\n2025-09-15,APPLE.COM/BILL iCloud+ 200GB,-2.99,USD\n2025-10-15,APPLE.COM/BILL iCloud+ 200GB,-3.99,USD\n2025-11-15,APPLE.COM/BILL iCloud+ 200GB,-3.99,USD\n2025-12-15,APPLE.COM/BILL iCloud+ 200GB,-3.99,USD\n2025-01-10,DISNEY PLUS,-13.99,USD\n2025-02-10,DISNEY PLUS,-13.99,USD\n2025-03-10,DISNEY PLUS,-13.99,USD\n2025-04-10,DISNEY PLUS,-13.99,USD\n2025-05-10,DISNEY PLUS,-13.99,USD\n2025-06-10,DISNEY PLUS,-13.99,USD\n2025-07-10,DISNEY PLUS,-13.99,USD\n2025-08-10,DISNEY PLUS,-13.99,USD\n2025-09-10,DISNEY PLUS,-13.99,USD\n2025-10-10,DISNEY PLUS,-15.99,USD\n2025-11-10,DISNEY PLUS,-15.99,USD\n2025-12-10,DISNEY PLUS,-15.99,USD\n2025-01-12,GOOGLE*YouTube Music,-9.99,USD\n2025-02-12,GOOGLE*YouTube Music,-9.99,USD\n2025-03-12,GOOGLE*YouTube Music,-9.99,USD\n2025-04-12,GOOGLE*YouTube Music,-9.99,USD\n2025-05-12,GOOGLE*YouTube Music,-9.99,USD\n2025-06-12,GOOGLE*YouTube Music,-10.99,USD\n2025-07-12,GOOGLE*YouTube Music,-10.99,USD\n2025-08-12,GOOGLE*YouTube Music,-10.99,USD\n2025-09-12,GOOGLE*YouTube Music,-10.99,USD\n2025-10-12,GOOGLE*YouTube Music,-10.99,USD\n2025-11-12,GOOGLE*YouTube Music,-10.99,USD\n2025-12-12,GOOGLE*YouTube Music,-10.99,USD\n2025-01-25,PAYPAL *HULU,-7.99,USD\n2025-02-25,PAYPAL *HULU,-7.99,USD\n2025-03-25,PAYPAL *HULU,-7.99,USD\n2025-04-25,PAYPAL *HULU,-7.99,USD\n2025-05-25,PAYPAL *HULU,-7.99,USD\n2025-06-25,PAYPAL *HULU,-7.99,USD\n2025-07-25,PAYPAL *HULU,-7.99,USD\n2025-08-25,PAYPAL *HULU,-7.99,USD\n2025-09-25,PAYPAL *HULU,-7.99,USD\n2025-10-25,PAYPAL *HULU,-7.99,USD\n2025-11-25,PAYPAL *HULU,-7.99,USD\n2025-12-25,PAYPAL *HULU,-7.99,USD\n2025-03-05,Microsoft 365 Personal - Annual,-99.99,USD\n2025-05-10,Amazon Prime Membership - Annual,-139.00,USD\n2025-01-05,The New York Times,-20.00,USD\n2025-02-05,The New York Times,-20.00,USD\n2025-03-05,The New York Times,-20.00,USD\n2025-04-05,The New York Times,-20.00,USD\n2025-05-05,The New York Times,-20.00,USD\n2025-06-05,The New York Times,-20.00,USD\n2025-07-05,The New York Times,-22.00,USD\n2025-08-05,The New York Times,-22.00,USD\n2025-09-05,The New York Times,-25.00,USD\n2025-10-05,The New York Times,-25.00,USD\n2025-11-05,The New York Times,-25.00,USD\n2025-12-05,The New York Times,-25.00,USD\n2025-02-18,Paramount+,-11.99,USD\n2025-06-18,Paramount+,-11.99,USD\n2025-09-18,Paramount+,-11.99,USD\n2025-04-01,APPLE.COM/BILL Headspace - Annual,-69.99,USD\n2025-01-28,ADOBE CREATIVE CLOUD,-59.99,USD\n2025-02-28,ADOBE CREATIVE CLOUD,-59.99,USD\n2025-03-28,ADOBE CREATIVE CLOUD,-59.99,USD\n2025-04-28,ADOBE CREATIVE CLOUD,-59.99,USD\n2025-05-28,ADOBE CREATIVE CLOUD,-59.99,USD\n2025-06-28,ADOBE CREATIVE CLOUD,-59.99,USD\n2025-07-28,ADOBE CREATIVE CLOUD,-59.99,USD\n2025-08-28,ADOBE CREATIVE CLOUD,-59.99,USD\n2025-09-28,ADOBE CREATIVE CLOUD,-59.99,USD\n2025-10-28,ADOBE CREATIVE CLOUD,-59.99,USD\n2025-11-28,ADOBE CREATIVE CLOUD,-59.99,USD\n2025-12-28,ADOBE CREATIVE CLOUD,-59.99,USD\n\nAmex_5678.csv\ndate,description,amount,currency\n2025-01-15,YOUTUBE PREMIUM,-13.99,USD\n2025-02-15,YOUTUBE PREMIUM,-13.99,USD\n2025-03-15,YOUTUBE PREMIUM,-13.99,USD\n2025-04-15,YOUTUBE PREMIUM,-13.99,USD\n2025-05-15,YOUTUBE PREMIUM,-13.99,USD\n2025-06-15,YOUTUBE PREMIUM,-13.99,USD\n2025-07-15,YOUTUBE PREMIUM,-14.99,USD\n2025-08-15,YOUTUBE PREMIUM,-14.99,USD\n2025-09-15,YOUTUBE PREMIUM,-14.99,USD\n2025-10-15,YOUTUBE PREMIUM,-14.99,USD\n2025-11-15,YOUTUBE PREMIUM,-14.99,USD\n2025-12-15,YOUTUBE PREMIUM,-14.99,USD\n2025-01-25,APPLE.COM/BILL HULU,-17.99,USD\n2025-02-25,APPLE.COM/BILL HULU,-17.99,USD\n2025-03-25,APPLE.COM/BILL HULU,-17.99,USD\n2025-04-25,APPLE.COM/BILL HULU,-17.99,USD\n2025-05-25,APPLE.COM/BILL HULU,-17.99,USD\n2025-06-25,APPLE.COM/BILL HULU,-17.99,USD\n2025-07-25,APPLE.COM/BILL HULU,-17.99,USD\n2025-08-25,APPLE.COM/BILL HULU,-17.99,USD\n2025-09-25,APPLE.COM/BILL HULU,-17.99,USD\n2025-10-25,APPLE.COM/BILL HULU,-17.99,USD\n2025-11-25,APPLE.COM/BILL HULU,-17.99,USD\n2025-12-25,APPLE.COM/BILL HULU,-17.99,USD\n2025-01-03,PELOTON MEMBERSHIP,-24.00,USD\n2025-02-03,PELOTON MEMBERSHIP,-24.00,USD\n2025-03-03,PELOTON MEMBERSHIP,-24.00,USD\n2025-04-03,PELOTON MEMBERSHIP,-24.00,USD\n2025-05-03,PELOTON MEMBERSHIP,-24.00,USD\n2025-06-03,PELOTON MEMBERSHIP,-24.00,USD\n2025-07-03,PELOTON MEMBERSHIP,-24.00,USD\n2025-08-03,PELOTON MEMBERSHIP,-24.00,USD\n2025-09-03,PELOTON MEMBERSHIP,-24.00,USD\n2025-10-03,PELOTON MEMBERSHIP,-24.00,USD\n2025-11-03,PELOTON MEMBERSHIP,-24.00,USD\n2025-12-03,PELOTON MEMBERSHIP,-24.00,USD\n2025-01-07,WSJ SUBSCRIPTION,-38.99,USD\n2025-02-07,WSJ SUBSCRIPTION,-38.99,USD\n2025-03-07,WSJ SUBSCRIPTION,-38.99,USD\n2025-04-07,WSJ SUBSCRIPTION,-38.99,USD\n2025-05-07,WSJ SUBSCRIPTION,-38.99,USD\n2025-06-07,WSJ SUBSCRIPTION,-38.99,USD\n2025-07-07,WSJ SUBSCRIPTION,-38.99,USD\n2025-08-07,WSJ SUBSCRIPTION,-38.99,USD\n2025-09-07,WSJ SUBSCRIPTION,-38.99,USD\n2025-10-07,WSJ SUBSCRIPTION,-38.99,USD\n2025-11-07,WSJ SUBSCRIPTION,-38.99,USD\n2025-12-07,WSJ SUBSCRIPTION,-38.99,USD\n2025-02-14,APPLE.COM/BILL iCLOUD+ 2TB,-9.99,USD\n2025-03-14,APPLE.COM/BILL iCLOUD+ 2TB,-9.99,USD\n2025-04-14,APPLE.COM/BILL iCLOUD+ 2TB,-9.99,USD\n2025-05-14,APPLE.COM/BILL iCLOUD+ 2TB,-9.99,USD\n2025-06-14,APPLE.COM/BILL iCLOUD+ 2TB,-9.99,USD\n2025-07-14,APPLE.COM/BILL iCLOUD+ 2TB,-9.99,USD\n2025-08-14,APPLE.COM/BILL iCLOUD+ 2TB,-9.99,USD\n2025-09-14,APPLE.COM/BILL iCLOUD+ 2TB,-9.99,USD\n2025-10-14,APPLE.COM/BILL iCLOUD+ 2TB,-12.99,USD\n2025-11-14,APPLE.COM/BILL iCLOUD+ 2TB,-12.99,USD\n2025-12-14,APPLE.COM/BILL iCLOUD+ 2TB,-12.99,USD",
+    "grading_guidance": {
+      "quality_criteria": [
+        "Parses both CSVs (Chase_Visa_1234 and Amex_5678) and consolidates transactions into a single subscription list covering the last 12 months in USD",
+        "Normalizes annual charges to monthly equivalents (e.g., Dropbox 119.88/yr \u2192 9.99/mo in 2024; 143.88/yr \u2192 11.99/mo in 2025; Microsoft 365 99.99/yr \u2192 ~8.33/mo; Amazon Prime 139/yr \u2192 ~11.58/mo; Headspace 69.99/yr \u2192 ~5.83/mo) and clearly marks them as annual",
+        "Detects and labels price increases with date and old\u2192new price for: Netflix (14.99\u219215.49 on 2025-06-20; 15.49\u219217.99 on 2025-11-20), Disney+ (13.99\u219215.99 on 2025-10-10), Spotify (10.99\u219211.99 on 2025-08-01), Apple iCloud 200GB (2.99\u21923.99 on 2025-10-15), Apple iCloud 2TB (9.99\u219212.99 on 2025-10-14), YouTube Music (9.99\u219210.99 on 2025-06-12), The New York Times (20.00\u219222.00 on 2025-07-05; 22.00\u219225.00 on 2025-09-05), and Dropbox annual (119.88\u2192143.88 on 2025-12-15)",
+        "Flags duplicate/overlapping subscriptions for the same service across platforms: Hulu billed twice concurrently (PAYPAL *HULU 7.99 on Chase vs APPLE.COM/BILL HULU 17.99 on Amex) and two concurrent Apple iCloud tiers (200GB on Chase and 2TB on Amex) as duplicates/potential over-subscription; does NOT incorrectly flag different services (e.g., Spotify vs YouTube Music, YouTube Music vs YouTube Premium) as duplicates",
+        "Provides actionable cancellation links or guidance per service where feasible (e.g., Netflix, Spotify, Disney+, Hulu via PayPal or Apple, Apple iCloud via Apple ID, Dropbox, Microsoft 365, Amazon Prime, Headspace, NYT, Paramount+, Adobe, Peloton, WSJ, YouTube services) and computes potential monthly savings if duplicates or selected services are canceled"
+      ],
+      "expected_components": [
+        "SubscriptionAuditTable showing each subscription with normalized monthly cost, billing source (Chase/Amex and merchant like Apple/Google/PayPal), last price change badge with date and delta, and annual vs monthly flag (MUST-HAVE: core view to audit costs and increases as the user requested)",
+        "PriceChangeTimeline displaying the detected price changes over the last 12 months for services with increases (Netflix, Disney+, Spotify, iCloud tiers, YouTube Music, NYT, Dropbox) (MUST-HAVE: user explicitly asked to flag price increases; timeline provides the expected visual trend)",
+        "DuplicateSuggestionList listing suspected duplicates/overlaps (Hulu on PayPal vs Apple; iCloud 200GB vs iCloud 2TB) with rationale and one-click cancel suggestions/links (MUST-HAVE: user asked to flag duplicates across cards and billing platforms)"
+      ]
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Audit complete for Chase Visa \u20221234 and Amex \u20225678 over the last 12 months (USD), including normalized annuals and taxes, and treating Apple/Google/PayPal charges as subscriptions. You have 18 active subs totaling about $303.62/month. I detected 4 duplicate/overlap groups with an estimated $60.96/month in potential savings if you keep the lowest-cost option in each group per your preference. There are 7 recent price increases within your 6\u2011month window, including notable jumps on Netflix, Disney+, both iCloud tiers, The New York Times, and Dropbox. Paramount+ is marked low-use as requested.\n\nDuplicates to consider resolving (keep cheapest):\n- Hulu billed twice via PayPal and Apple (same service via different channels)\n- YouTube Premium vs YouTube Music (Premium includes Music)\n- Spotify vs YouTube Music (overlapping music services)\n- iCloud+ 200GB vs iCloud+ 2TB (same service, two concurrent plans)\n\nCancellation help (non-clickable references):\n- Netflix: help.netflix.com\n- Spotify: support.spotify.com\n- YouTube Premium/Music: pay.google.com or youtube.com/paid_memberships\n- Hulu: help.hulu.com (or your Apple/PayPal billing settings)\n- iCloud+: appleid.apple.com \u2192 Subscriptions\n- Disney+: help.disneyplus.com\n- NYT/WSJ: nytimes.com/account, wsj.com/myaccount\n- Dropbox: dropbox.com/account/billing\n- Microsoft 365: account.microsoft.com\n- Amazon Prime: amazon.com/yourmembershipsandsubscriptions\n- Headspace: help.headspace.com\n- Peloton: support.onepeloton.com\n- Adobe Creative Cloud: account.adobe.com\n\nIf you want, I can break out price-change timelines for specific subscriptions or prepare a cancellation checklist for the duplicate groups."
+      },
+      {
+        "type": "component",
+        "component": {
+          "name": "SubscriptionAuditTable",
+          "props": {
+            "names": [
+              "Netflix",
+              "Spotify",
+              "iCloud+ 200GB (Apple)",
+              "iCloud+ 2TB (Apple)",
+              "Disney+",
+              "YouTube Music (Google)",
+              "YouTube Premium",
+              "Hulu (PayPal)",
+              "Hulu (Apple)",
+              "The New York Times",
+              "Paramount+",
+              "Dropbox",
+              "Microsoft 365 Personal",
+              "Amazon Prime",
+              "Headspace",
+              "Peloton",
+              "Wall Street Journal",
+              "Adobe Creative Cloud"
+            ],
+            "monthlyCosts": [
+              17.99,
+              11.99,
+              3.99,
+              12.99,
+              15.99,
+              10.99,
+              14.99,
+              7.99,
+              17.99,
+              25,
+              3,
+              11.99,
+              8.33,
+              11.58,
+              5.83,
+              24,
+              38.99,
+              59.99
+            ],
+            "lastIncreaseBadges": [
+              "\u219116% on 2025-11-20",
+              "\u21919% on 2025-08-01",
+              "\u219133% on 2025-10-15",
+              "\u219130% on 2025-10-14",
+              "\u219114% on 2025-10-10",
+              "",
+              "\u21917% on 2025-07-15",
+              "",
+              "",
+              "\u219113% on 2025-09-05",
+              "",
+              "\u219120% on 2025-12-15",
+              "",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "usageEstimates": [
+              "high",
+              "medium",
+              "medium",
+              "medium",
+              "high",
+              "medium",
+              "low",
+              "medium",
+              "low",
+              "high",
+              "low",
+              "medium",
+              "medium",
+              "medium",
+              "medium",
+              "high",
+              "high",
+              "high"
+            ],
+            "cancelSavingsMonthly": [
+              17.99,
+              11.99,
+              3.99,
+              12.99,
+              15.99,
+              10.99,
+              14.99,
+              7.99,
+              17.99,
+              25,
+              3,
+              11.99,
+              8.33,
+              11.58,
+              5.83,
+              24,
+              38.99,
+              59.99
+            ]
+          }
+        }
+      },
+      {
+        "type": "component",
+        "component": {
+          "name": "AuditSummaryBar",
+          "props": {
+            "totalMonthlySpend": 303.62,
+            "subscriptionCount": 18,
+            "potentialSavingsMonthly": 60.96,
+            "increasesCount": 7,
+            "duplicatesCount": 4
+          }
+        }
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": "Show me the full table with monthly cost, last-increase badges, usage estimates, and the 1/3/12\u2011month savings calculator. Also generate price-change timelines for Netflix, Disney+, Spotify, YouTube Premium, iCloud+, Dropbox, and NYT. Prep a cancellation checklist for: YouTube Music, Apple\u2011billed Hulu (keep PayPal Hulu), iCloud+ 200GB (keep 2TB), and Paramount+.",
+    "grading_guidance": {
+      "quality_criteria": [
+        "Displays a SubscriptionAuditTable that includes: monthly cost (with annuals normalized, e.g., Dropbox annual -> monthly), last-increase badges, and usage estimates, and integrates a SavingsCalculatorPopover showing 1-, 3-, and 12-month savings for each subscription",
+        "Generates PriceChangeTimeline components for exactly these seven services: Netflix, Disney+, Spotify, YouTube Premium, iCloud+, Dropbox, and The New York Times (NYT), using the user's last 12 months of transactions",
+        "Provides a clear, step-by-step cancellation checklist for the four specified items only: YouTube Music, Apple-billed Hulu (explicitly preserving PayPal-billed Hulu), iCloud+ 200GB (explicitly preserving the 2TB plan), and Paramount+, with direct manage/cancel links and any pertinent platform/billing-channel notes",
+        "Preserves the previously established audit scope (Chase Visa \u20221234 and Amex \u20225678, last 12 months, USD) and aligns costs and price-change badges with that data",
+        "Does not suggest canceling PayPal Hulu or iCloud+ 2TB, and does not include unrelated components or services beyond the seven timelines and four cancellations requested"
+      ],
+      "expected_components": [
+        "SubscriptionAuditTable showing each subscription's normalized monthly cost, last-increase badge, usage estimate, and embedded SavingsCalculatorPopover for 1/3/12-month savings (MUST-HAVE because the user explicitly asked to see the full table with these fields and savings calculator)",
+        "PriceChangeTimeline for Netflix, Disney+, Spotify, YouTube Premium, iCloud+, Dropbox, and NYT (MUST-HAVE because the user explicitly requested price-change timelines for these seven services)",
+        "SavingsCalculatorPopover attached to rows in the SubscriptionAuditTable for per-subscription 1/3/12-month savings (MUST-HAVE because the user explicitly asked for a 1/3/12-month savings calculator)"
+      ]
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I\u2019ve compiled your full subscription audit with normalized annuals, recent price increases flagged per your 6\u2011month rule, and usage estimates (Paramount+ set to low). I also prepared the requested price\u2011change timelines and a focused cancellation checklist with 1/3/12\u2011month savings and cancellation links.\n\nHighlights:\n- Total current spend: about $312.61/month across 18 subs\n- Duplicates to resolve: Hulu (Apple vs PayPal), YouTube Premium vs YouTube Music, Spotify vs YouTube Music, iCloud+ 200GB vs 2TB\n- Recent increases detected on: Netflix, Disney+, Spotify, YouTube Premium, YouTube Music, iCloud+ (both plans), NYT, and Dropbox\n\nPrice\u2011change timelines (dates \u2192 price):\n- Netflix: 2025-01-20 \u2192 $14.99; 2025-06-20 \u2192 $15.49; 2025-11-20 \u2192 $17.99\n- Disney+: 2025-01-10 \u2192 $13.99; 2025-10-10 \u2192 $15.99\n- Spotify: 2025-01-01 \u2192 $10.99; 2025-08-01 \u2192 $11.99\n- YouTube Premium: 2025-01-15 \u2192 $13.99; 2025-07-15 \u2192 $14.99\n- YouTube Music: 2025-01-12 \u2192 $9.99; 2025-06-12 \u2192 $10.99\n- iCloud+ 200GB: 2025-01-15 \u2192 $2.99; 2025-10-15 \u2192 $3.99\n- iCloud+ 2TB: 2025-02-14 \u2192 $9.99; 2025-10-14 \u2192 $12.99\n- Dropbox (annual, normalized): 2024-12-15 \u2192 $119.88/yr; 2025-12-15 \u2192 $143.88/yr (now ~$11.99/mo)\n- The New York Times: 2025-01-05 \u2192 $20.00; 2025-07-05 \u2192 $22.00; 2025-09-05 \u2192 $25.00\n\nCancellation checklist (your requested items):\n1) YouTube Music (keep YouTube Premium)\n- Savings if canceled: 1m $10.99, 3m $32.97, 12m $131.88\n- Next billing: 2026-01-12 (based on last charge 2025-12-12)\n- Cancel link: pay.google.com or youtube.com/paid_memberships\n\n2) Hulu billed via Apple (keep Hulu via PayPal)\n- Savings if canceled: 1m $17.99, 3m $53.97, 12m $215.88\n- Next billing: 2026-01-25 (based on last charge 2025-12-25)\n- Cancel link: appleid.apple.com \u2192 Subscriptions (or device Settings \u2192 Apple ID \u2192 Subscriptions)\n\n3) iCloud+ 200GB (keep iCloud+ 2TB)\n- Savings if canceled: 1m $3.99, 3m $11.97, 12m $47.88\n- Next billing: 2026-01-15 (based on last charge 2025-12-15)\n- Cancel link: appleid.apple.com \u2192 Subscriptions\n\n4) Paramount+ (low use)\n- Savings if canceled: 1m $11.99, 3m $35.97, 12m $143.88\n- Next billing: pattern appears quarterly (Feb/Jun/Sep); next expected around 2025-12-18\n- Cancel link: help.paramountplus.com (or the platform where it\u2019s billed)\n\nIf you\u2019d like, I can also compute total savings for a chosen de-duplication strategy (e.g., keep YouTube Premium and drop Music/Spotify) and produce a step-by-step cancellation runbook."
+      },
+      {
+        "type": "component",
+        "component": {
+          "name": "AuditSummaryBar",
+          "props": {
+            "totalMonthlySpend": 312.61,
+            "subscriptionCount": 18,
+            "potentialSavingsMonthly": 69.95,
+            "increasesCount": 9,
+            "duplicatesCount": 4
+          }
+        }
+      },
+      {
+        "type": "component",
+        "component": {
+          "name": "SubscriptionAuditTable",
+          "props": {
+            "names": [
+              "Netflix",
+              "Spotify",
+              "YouTube Music",
+              "YouTube Premium",
+              "Disney+",
+              "Hulu (PayPal)",
+              "Hulu (Apple)",
+              "iCloud+ 200GB",
+              "iCloud+ 2TB",
+              "Dropbox",
+              "Microsoft 365",
+              "Amazon Prime",
+              "The New York Times",
+              "Wall Street Journal",
+              "Paramount+",
+              "Headspace",
+              "Peloton",
+              "Adobe Creative Cloud"
+            ],
+            "monthlyCosts": [
+              17.99,
+              11.99,
+              10.99,
+              14.99,
+              15.99,
+              7.99,
+              17.99,
+              3.99,
+              12.99,
+              11.99,
+              8.33,
+              11.58,
+              25,
+              38.99,
+              11.99,
+              5.83,
+              24,
+              59.99
+            ],
+            "lastIncreaseBadges": [
+              "\u219116.1% on 2025-11-20",
+              "\u21919.1% on 2025-08-01",
+              "\u219110.0% on 2025-06-12",
+              "\u21917.2% on 2025-07-15",
+              "\u219114.3% on 2025-10-10",
+              "\u2014",
+              "\u2014",
+              "\u219133.4% on 2025-10-15",
+              "\u219130.0% on 2025-10-14",
+              "\u219120.0% on 2025-12-15",
+              "\u2014",
+              "\u2014",
+              "\u219113.6% on 2025-09-05",
+              "\u2014",
+              "\u2014",
+              "\u2014",
+              "\u2014",
+              "\u2014"
+            ],
+            "usageEstimates": [
+              "high",
+              "high",
+              "medium",
+              "high",
+              "high",
+              "high",
+              "high",
+              "medium",
+              "high",
+              "medium",
+              "medium",
+              "medium",
+              "high",
+              "high",
+              "low",
+              "medium",
+              "high",
+              "high"
+            ],
+            "cancelSavingsMonthly": [
+              17.99,
+              11.99,
+              10.99,
+              14.99,
+              15.99,
+              7.99,
+              17.99,
+              3.99,
+              12.99,
+              11.99,
+              8.33,
+              11.58,
+              25,
+              38.99,
+              11.99,
+              5.83,
+              24,
+              59.99
+            ]
+          }
+        }
+      }
+    ]
+  }
+];
+
+    // Component implementations
+    // SubscriptionAuditTable
+const SubscriptionAuditTable = (props) => {
+  const {
+    names = [],
+    monthlyCosts = [],
+    lastIncreaseBadges = [],
+    usageEstimates = [],
+    cancelSavingsMonthly = []
+  } = props || {};
+
+  const formatCurrency = (n) => {
+    const num = Number(n);
+    const safe = isNaN(num) ? 0 : num;
+    return "$" + safe.toFixed(2);
+  };
+
+  const usageBadge = (level) => {
+    const text = (level || "").toString().toLowerCase();
+    const map = {
+      low: "bg-green-100 text-green-700",
+      medium: "bg-blue-100 text-blue-700",
+      high: "bg-gray-100 text-gray-700"
+    };
+    const cls = map[text] || "bg-gray-100 text-gray-700";
+    const label = text ? text.charAt(0).toUpperCase() + text.slice(1) : "Unknown";
+    return (
+      <span className={"px-2 py-1 text-xs font-medium rounded " + cls}>
+        {label}
+      </span>
+    );
+  };
+
+  const increaseBadge = (txt) => {
+    const label = txt || "No recent change";
+    const cls = txt ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-700";
+    return (
+      <span className={"px-2 py-1 text-xs font-medium rounded " + cls}>
+        {label}
+      </span>
+    );
+  };
+
+  const rowCount = Math.max(
+    Array.isArray(names) ? names.length : 0,
+    Array.isArray(monthlyCosts) ? monthlyCosts.length : 0,
+    Array.isArray(lastIncreaseBadges) ? lastIncreaseBadges.length : 0,
+    Array.isArray(usageEstimates) ? usageEstimates.length : 0,
+    Array.isArray(cancelSavingsMonthly) ? cancelSavingsMonthly.length : 0
+  );
+
+  const rows = Array.from({ length: rowCount }).map((_, i) => {
+    const name = Array.isArray(names) && names[i] ? names[i] : "Unnamed Subscription";
+    const cost = Array.isArray(monthlyCosts) && typeof monthlyCosts[i] === "number" ? monthlyCosts[i] : 0;
+    const inc = Array.isArray(lastIncreaseBadges) && lastIncreaseBadges[i] ? lastIncreaseBadges[i] : "";
+    const usage = Array.isArray(usageEstimates) && usageEstimates[i] ? usageEstimates[i] : "";
+    const save = Array.isArray(cancelSavingsMonthly) && typeof cancelSavingsMonthly[i] === "number" ? cancelSavingsMonthly[i] : 0;
+    return { name, cost, inc, usage, save, idx: i };
+  });
+
+  const totals = rows.reduce(
+    (acc, r) => {
+      const c = isNaN(Number(r.cost)) ? 0 : Number(r.cost);
+      const s = isNaN(Number(r.save)) ? 0 : Number(r.save);
+      return { cost: acc.cost + c, save: acc.save + s };
+    },
+    { cost: 0, save: 0 }
+  );
+
+  return (
+    <div className="w-full max-w-2xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow duration-200">
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Subscription Audit</h3>
+          <p className="text-sm text-gray-600">Overview of recurring costs and potential savings</p>
+        </div>
+        <div className="text-right">
+          <div className="text-sm text-gray-600">Total Monthly Cost</div>
+          <div className="text-base font-semibold text-gray-900">{formatCurrency(totals.cost)}</div>
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-md">
+          <span className="text-xl">🗂️</span>
+          <div>
+            <div className="text-sm font-medium text-gray-800">No subscriptions to display</div>
+            <div className="text-xs text-gray-600">Provide subscription data to see audit details</div>
+          </div>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-md border border-gray-200">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Name</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">Monthly Cost</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Last Increase</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Usage</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">Cancel Savings/mo</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-100">
+              {rows.map((row) => (
+                <tr key={row.idx} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-md bg-gray-100 flex items-center justify-center text-gray-500 text-sm mr-3">
+                        {row.name ? row.name.charAt(0).toUpperCase() : "S"}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-gray-900 line-clamp-1">{row.name}</div>
+                        <div className="text-xs text-gray-500">Recurring</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right text-sm text-gray-900 font-medium">{formatCurrency(row.cost)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {increaseBadge(row.inc)}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {usageBadge(row.usage)}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="text-sm font-semibold text-green-600">{formatCurrency(row.save)}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="bg-gray-50">
+              <tr>
+                <td className="px-4 py-3 text-sm font-medium text-gray-700">Totals</td>
+                <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">{formatCurrency(totals.cost)}</td>
+                <td className="px-4 py-3"></td>
+                <td className="px-4 py-3"></td>
+                <td className="px-4 py-3 text-right text-sm font-semibold text-green-700">{formatCurrency(totals.save)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
+          <div className="text-xs text-gray-600">Subscriptions</div>
+          <div className="text-base font-semibold text-gray-900">{rows.length.toLocaleString()}</div>
+        </div>
+        <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
+          <div className="text-xs text-gray-600">Monthly Cost</div>
+          <div className="text-base font-semibold text-gray-900">{formatCurrency(totals.cost)}</div>
+        </div>
+        <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
+          <div className="text-xs text-gray-600">Potential Annual Savings</div>
+          <div className="text-base font-semibold text-green-700">{formatCurrency(totals.save * 12)}</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// AuditSummaryBar
+const AuditSummaryBar = (props) => {
+  const {
+    totalMonthlySpend,
+    subscriptionCount,
+    potentialSavingsMonthly,
+    increasesCount,
+    duplicatesCount,
+  } = props || {};
+
+  const spend = isNaN(Number(totalMonthlySpend)) ? null : Number(totalMonthlySpend);
+  const subs = isNaN(Number(subscriptionCount)) ? null : Number(subscriptionCount);
+  const savings = isNaN(Number(potentialSavingsMonthly)) ? null : Number(potentialSavingsMonthly);
+  const inc = isNaN(Number(increasesCount)) ? null : Number(increasesCount);
+  const dup = isNaN(Number(duplicatesCount)) ? null : Number(duplicatesCount);
+
+  const hasData =
+    (typeof spend === 'number' && !isNaN(spend)) ||
+    (typeof subs === 'number' && !isNaN(subs)) ||
+    (typeof savings === 'number' && !isNaN(savings)) ||
+    (typeof inc === 'number' && !isNaN(inc)) ||
+    (typeof dup === 'number' && !isNaN(dup));
+
+  const currency = (n) => {
+    const num = Number(n);
+    if (isNaN(num)) return '—';
+    try {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(num);
+    } catch (e) {
+      return '$' + num.toLocaleString();
+    }
+  };
+
+  const formatCount = (n) => {
+    const num = Number(n);
+    return isNaN(num) ? '—' : num.toLocaleString();
+  };
+
+  const savingsPct = (() => {
+    if (typeof spend === 'number' && spend > 0 && typeof savings === 'number' && savings >= 0) {
+      const pct = Math.min(100, Math.max(0, (savings / spend) * 100));
+      return pct;
+    }
+    return 0;
+  })();
+
+  if (!hasData) {
+    return (
+      <div className="w-full max-w-2xl mx-auto bg-white border border-gray-200 rounded-lg p-6 shadow-sm text-center">
+        <div className="mx-auto mb-2 text-3xl">🗂️</div>
+        <div className="text-lg font-semibold text-gray-900">Audit Summary</div>
+        <div className="mt-1 text-sm text-gray-600">No audit data available</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full max-w-2xl mx-auto bg-white border border-gray-200 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <div className="text-lg font-semibold text-gray-900">Audit Summary</div>
+          <div className="text-sm text-gray-600">Snapshot of your subscription spend</div>
+        </div>
+        <div className="px-3 py-1 rounded-md bg-blue-50 text-blue-700 text-sm font-medium">
+          Total Spend: {currency(spend)}/mo
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        <div className="p-4 rounded-lg border border-gray-100 bg-gray-50">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm font-medium text-gray-700">Potential Savings</span>
+            <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">
+              {savingsPct ? Math.round(savingsPct) : 0}% of spend
+            </span>
+          </div>
+          <div className="text-xl font-semibold text-green-700">{currency(savings)}/mo</div>
+          <div className="mt-3">
+            <div className="w-full h-2 bg-gray-200 rounded">
+              <div
+                className="h-2 bg-green-500 rounded"
+                style={{ width: savingsPct + '%' }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-lg border border-gray-100 bg-gray-50">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm font-medium text-gray-700">Subscriptions</span>
+            <span className="text-xs text-gray-500">Active</span>
+          </div>
+          <div className="text-xl font-semibold text-gray-900">{formatCount(subs)}</div>
+          <div className="mt-1 text-xs text-gray-500">Tracked in this audit</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="p-3 rounded-lg border border-gray-100">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">Increases</span>
+            <span className="text-blue-600">📈</span>
+          </div>
+          <div className="mt-1 text-lg font-semibold text-gray-900">{formatCount(inc)}</div>
+          <div className="text-xs text-gray-500">Price changes detected</div>
+        </div>
+
+        <div className="p-3 rounded-lg border border-gray-100">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">Duplicates</span>
+            <span className="text-gray-600">🧩</span>
+          </div>
+          <div className="mt-1 text-lg font-semibold text-gray-900">{formatCount(dup)}</div>
+          <div className="text-xs text-gray-500">Potential overlaps found</div>
+        </div>
+
+        <div className="p-3 rounded-lg border border-gray-100">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">Net Spend (est.)</span>
+            <span className="text-gray-600">💼</span>
+          </div>
+          <div className="mt-1 text-lg font-semibold text-gray-900">
+            {typeof spend === 'number' && typeof savings === 'number'
+              ? currency(Math.max(0, spend - savings))
+              : '—'}
+            <span className="text-sm text-gray-500">/mo</span>
+          </div>
+          <div className="text-xs text-gray-500">After potential savings</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+    // Component registry
+    const ComponentRegistry = {
+      AuditSummaryBar: AuditSummaryBar,
+      SubscriptionAuditTable: SubscriptionAuditTable
+    };
+
+    // Component renderer
+    const ComponentRenderer = ({ componentName, props }) => {
+      const Component = ComponentRegistry[componentName];
+
+      if (!Component) {
+        return (
+          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-sm text-yellow-800">Component "{componentName}" not found</p>
+          </div>
+        );
+      }
+
+      return <Component {...props} />;
+    };
+
+    // Content chunk renderer
+    const ContentChunkRenderer = ({ chunk }) => {
+      if (chunk.type === 'text') {
+        return <div className="text-gray-800 whitespace-pre-wrap">{chunk.text}</div>;
+      } else if (chunk.type === 'component') {
+        const { name, props } = chunk.component;
+        return (
+          <div className="my-4">
+            <ComponentRenderer componentName={name} props={props} />
+          </div>
+        );
+      }
+      return null;
+    };
+
+    // Message bubble
+    const MessageBubble = ({ message }) => {
+      const role = message.role;
+      const content = message.content;
+
+      if (role === 'user') {
+        return (
+          <div className="flex justify-end mb-4">
+            <div className="bg-blue-500 text-white rounded-2xl rounded-tr-sm px-4 py-2 max-w-2xl">
+              {content}
+            </div>
+          </div>
+        );
+      } else if (role === 'assistant') {
+        return (
+          <div className="flex justify-start mb-4">
+            <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 max-w-4xl shadow-sm">
+              {Array.isArray(content) ? (
+                <div className="space-y-3">
+                  {content.map((chunk, idx) => (
+                    <ContentChunkRenderer key={idx} chunk={chunk} />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-gray-800">{content}</div>
+              )}
+            </div>
+          </div>
+        );
+      } else if (role === 'tool') {
+        return (
+          <div className="flex justify-center mb-4">
+            <div className="bg-gray-100 text-gray-700 rounded-lg px-3 py-2 text-sm max-w-2xl">
+              <div className="font-medium text-gray-500 text-xs mb-1">Tool Response</div>
+              <div className="font-mono text-xs">{content}</div>
+            </div>
+          </div>
+        );
+      }
+
+      return null;
+    };
+
+    // Conversation view
+    const ConversationView = ({ conversation }) => {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
+          <div className="max-w-5xl mx-auto px-4">
+            <div className="bg-white rounded-3xl shadow-xl p-8">
+              <h1 className="text-2xl font-bold text-gray-900 mb-6">Audit my subscriptions from these statements. Flag duplicates and price increases.</h1>
+              <div className="space-y-2">
+                {conversation.map((msg, idx) => (
+                  <MessageBubble key={idx} message={msg} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // Render to DOM
+    const rootEl = document.getElementById("root");
+    if (rootEl) {
+      const root = createRoot(rootEl);
+      root.render(<ConversationView conversation={conversationData} />);
+    }
+  </script>
+</body>
+</html>

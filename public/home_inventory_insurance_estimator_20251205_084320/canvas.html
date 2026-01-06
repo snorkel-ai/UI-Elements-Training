@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conversation Viewer</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { margin: 0; padding: 0; background: #f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    #root { min-height: 100vh; }
+    * { box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
+    const { createRoot } = ReactDOM;
+
+    const conversationData = [
+      {
+        "role": "user",
+        "content": "I documented items in my home\u2014help me estimate replacement costs and spot underinsured categories.",
+        "grading_guidance": {
+          "quality_criteria": [
+            "Professional, clear, and supportive tone; avoids jargon or explains it when necessary",
+            "Directly addresses both goals: estimating replacement costs and identifying underinsured categories",
+            "Provides a structured, step-by-step approach and summarizes key findings and recommendations",
+            "Accurate and relevant guidance grounded in common insurance practices (e.g., replacement cost vs. actual cash value, category limits, sub-limits for valuables)",
+            "Calls out assumptions and data needs; requests missing information and clarifies how estimates were derived",
+            "Highlights high-risk or underinsured areas and offers actionable next steps to improve coverage",
+            "Maintains concise, organized delivery while being comprehensive and practical",
+            "Uses appropriate, user-friendly language and maintains conversational flow"
+          ],
+          "expected_components": [
+            "CategoryValuePieChart",
+            "CoverageEstimateCards"
+          ]
+        }
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Great\u2014happy to help estimate replacement costs and spot underinsured areas. To generate a category pie chart, high\u2011value item list, risk scorecard, and recommended coverage estimates, please share your inventory data (CSV or JSON) with these fields per item:\n\n- name (e.g., \"65\" TV\")\n- category (e.g., Electronics, Furniture, Jewelry, Appliances, Art, Tools, Clothing, Sports, Misc.)\n- replacementCost (numeric, per unit)\n- insuredAmount (numeric, per unit or total\u2014tell me which)\n- quantity (numeric)\n- notes (optional; brand/model/serial)\n- currency (e.g., USD)\n\nAlso share current policy limits if you have them:\n- contentsLimit (total personal property coverage)\n- perCategoryLimits (if any sublimits; e.g., jewelry: 2,500 USD)\n- perItemSublimits (e.g., electronics: 2,000 USD per item)\n- deductible (optional)\n\nWhat I\u2019ll produce once you provide the data:\n- Total replacement cost vs. current insured amount\n- Underinsured categories and estimated shortfalls\n- A high\u2011value item table with gaps flagged\n- An overall risk score and key drivers (e.g., high concentration in sublimited categories)\n- Recommended coverage limits by contents and key categories\n\nIf it\u2019s easier, paste a few sample rows, and I\u2019ll confirm the format before running the full analysis."
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": "Here\u2019s a sample CSV (insuredAmount is per item; currency USD):\n\nname,category,replacementCost,insuredAmount,quantity,notes,currency\n65\" TV,Electronics,900,500,1,Samsung QLED 2022,USD\nLaptop,Electronics,1500,1000,2,MacBook Air M2,USD\nDiamond ring,Jewelry,4500,2500,1,0.75ct,USD\nSofa,Furniture,1800,1800,1,Sectional,USD\nWasher,Appliances,800,800,1,LG front-load,USD\nRoad bike,Sports,2200,1000,1,Canyon Endurace,USD\nPower tools set,Tools,1200,500,1,DeWalt combo,USD\nOil painting,Art,6000,1000,1,Local artist,USD\nWinter coats,Clothing,600,600,3,Mixed brands,USD\n\nPolicy:\ncontentsLimit: 65,000 USD\nperCategoryLimits: jewelry 2,500 USD; art 2,000 USD\nperItemSublimits: electronics 2,000 USD per item; bicycle 1,000 USD per item\ndeductible: 1,000 USD",
+        "grading_guidance": {
+          "quality_criteria": [
+            "Clear, professional, and supportive tone that guides the user through findings and recommendations",
+            "Complete coverage of the request: calculates replacement cost estimates, identifies underinsured items/categories, and references policy limits and sublimits",
+            "Accurate computation and interpretation: correctly applies per-item sublimits, per-category limits, overall contents limit, and deductible to identify gaps",
+            "Actionable insights: highlights shortfalls, explains why they occur, and suggests practical next steps (e.g., endorsements, increasing limits)",
+            "Organized and easy to follow: uses concise structure with summaries and key takeaways before details",
+            "Aligns the narrative with the expected visuals, describing what each component will show without assuming tool execution",
+            "Transparent about assumptions and data handling (e.g., insuredAmount per item, currency is USD, quantities accounted for)",
+            "Avoids unnecessary jargon and maintains conversational flow tailored to a non-expert user"
+          ],
+          "expected_components": [
+            "CoverageEstimateCards",
+            "RiskRatingScorecard"
+          ]
+        }
+      },
+      {
+        "role": "assistant",
+        "content": [],
+        "toolCalls": [
+          {
+            "id": "p0q7p3x6C",
+            "type": "function",
+            "function": {
+              "name": "analyze_data",
+              "arguments": "{\"inventoryFormat\": \"csv\", \"csv\": \"name,category,replacementCost,insuredAmount,quantity,notes,currency\\n65\\\" TV,Electronics,900,500,1,Samsung QLED 2022,USD\\nLaptop,Electronics,1500,1000,2,MacBook Air M2,USD\\nDiamond ring,Jewelry,4500,2500,1,0.75ct,USD\\nSofa,Furniture,1800,1800,1,Sectional,USD\\nWasher,Appliances,800,800,1,LG front-load,USD\\nRoad bike,Sports,2200,1000,1,Canyon Endurace,USD\\nPower tools set,Tools,1200,500,1,DeWalt combo,USD\\nOil painting,Art,6000,1000,1,Local artist,USD\\nWinter coats,Clothing,600,600,3,Mixed brands,USD\", \"policy\": {\"contentsLimit\": 65000, \"perCategoryLimits\": {\"Jewelry\": 2500, \"Art\": 2000}, \"perItemSublimits\": {\"Electronics\": 2000, \"Bicycle\": 1000}, \"deductible\": 1000, \"currency\": \"USD\"}, \"outputs\": [\"overview\", \"categoryBreakdown\", \"highValueItems\", \"riskScore\", \"coverageEstimates\"]}"
+            },
+            "tool_executed": true
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "p0q7p3x6C",
+        "content": "{\n  \"overview\": {\n    \"currency\": \"USD\",\n    \"lineItems\": 9,\n    \"totalQuantity\": 12,\n    \"totalReplacementValue\": 22200,\n    \"totalInsuredValue\": 11900,\n    \"overallShortfall\": 10300,\n    \"coverageRatio\": 0.536,\n    \"deductible\": 1000,\n    \"contentsLimit\": 65000,\n    \"contentsLimitAdequacy\": \"Adequate (limit exceeds projected need)\",\n    \"sublimitExposures\": [\n      {\n        \"type\": \"Category\",\n        \"category\": \"Jewelry\",\n        \"limit\": 2500,\n        \"replacement\": 4500,\n        \"exposureBeyondLimit\": 2000\n      },\n      {\n        \"type\": \"Category\",\n        \"category\": \"Art\",\n        \"limit\": 2000,\n        \"replacement\": 6000,\n        \"exposureBeyondLimit\": 4000\n      },\n      {\n        \"type\": \"Per-item\",\n        \"category\": \"Sports\",\n        \"item\": \"Road bike\",\n        \"limit\": 1000,\n        \"replacement\": 2200,\n        \"exposureBeyondLimit\": 1200\n      }\n    ],\n    \"generatedAt\": \"2025-12-05T00:00:00Z\"\n  },\n  \"categoryBreakdown\": {\n    \"totalReplacementValue\": 22200,\n    \"byCategory\": [\n      {\n        \"category\": \"Art\",\n        \"replacementValue\": 6000,\n        \"insuredValue\": 1000,\n        \"percentageOfTotal\": 27.03\n      },\n      {\n        \"category\": \"Jewelry\",\n        \"replacementValue\": 4500,\n        \"insuredValue\": 2500,\n        \"percentageOfTotal\": 20.27\n      },\n      {\n        \"category\": \"Electronics\",\n        \"replacementValue\": 3900,\n        \"insuredValue\": 2500,\n        \"percentageOfTotal\": 17.57\n      },\n      {\n        \"category\": \"Sports\",\n        \"replacementValue\": 2200,\n        \"insuredValue\": 1000,\n        \"percentageOfTotal\": 9.91\n      },\n      {\n        \"category\": \"Furniture\",\n        \"replacementValue\": 1800,\n        \"insuredValue\": 1800,\n        \"percentageOfTotal\": 8.11\n      },\n      {\n        \"category\": \"Clothing\",\n        \"replacementValue\": 1800,\n        \"insuredValue\": 1800,\n        \"percentageOfTotal\": 8.11\n      },\n      {\n        \"category\": \"Tools\",\n        \"replacementValue\": 1200,\n        \"insuredValue\": 500,\n        \"percentageOfTotal\": 5.41\n      },\n      {\n        \"category\": \"Appliances\",\n        \"replacementValue\": 800,\n        \"insuredValue\": 800,\n        \"percentageOfTotal\": 3.6\n      }\n    ]\n  },\n  \"highValueItems\": [\n    {\n      \"name\": \"Oil painting\",\n      \"category\": \"Art\",\n      \"unitReplacementCost\": 6000,\n      \"quantity\": 1,\n      \"totalReplacementCost\": 6000,\n      \"insuredPerUnit\": 1000,\n      \"totalInsured\": 1000,\n      \"shortfall\": 5000,\n      \"policyConstraints\": {\n        \"categoryLimit\": 2000,\n        \"perItemSublimit\": null,\n        \"effectiveMaxPayoutUnderCurrentLimits\": 1000\n      },\n      \"notes\": \"Exceeds Art category limit; recommend scheduling\"\n    },\n    {\n      \"name\": \"Diamond ring\",\n      \"category\": \"Jewelry\",\n      \"unitReplacementCost\": 4500,\n      \"quantity\": 1,\n      \"totalReplacementCost\": 4500,\n      \"insuredPerUnit\": 2500,\n      \"totalInsured\": 2500,\n      \"shortfall\": 2000,\n      \"policyConstraints\": {\n        \"categoryLimit\": 2500,\n        \"perItemSublimit\": null,\n        \"effectiveMaxPayoutUnderCurrentLimits\": 2500\n      },\n      \"notes\": \"Capped by Jewelry category limit; schedule to remove sublimit\"\n    },\n    {\n      \"name\": \"Road bike\",\n      \"category\": \"Sports\",\n      \"unitReplacementCost\": 2200,\n      \"quantity\": 1,\n      \"totalReplacementCost\": 2200,\n      \"insuredPerUnit\": 1000,\n      \"totalInsured\": 1000,\n      \"shortfall\": 1200,\n      \"policyConstraints\": {\n        \"categoryLimit\": null,\n        \"perItemSublimit\": 1000,\n        \"effectiveMaxPayoutUnderCurrentLimits\": 1000\n      },\n      \"notes\": \"Limited by bicycle per-item sublimit; consider bike endorsement\"\n    },\n    {\n      \"name\": \"Laptop\",\n      \"category\": \"Electronics\",\n      \"unitReplacementCost\": 1500,\n      \"quantity\": 2,\n      \"totalReplacementCost\": 3000,\n      \"insuredPerUnit\": 1000,\n      \"totalInsured\": 2000,\n      \"shortfall\": 1000,\n      \"policyConstraints\": {\n        \"categoryLimit\": null,\n        \"perItemSublimit\": 2000,\n        \"effectiveMaxPayoutUnderCurrentLimits\": 2000\n      },\n      \"notes\": \"Underinsured vs replacement (sublimit not constraining)\"\n    },\n    {\n      \"name\": \"Power tools set\",\n      \"category\": \"Tools\",\n      \"unitReplacementCost\": 1200,\n      \"quantity\": 1,\n      \"totalReplacementCost\": 1200,\n      \"insuredPerUnit\": 500,\n      \"totalInsured\": 500,\n      \"shortfall\": 700,\n      \"policyConstraints\": {\n        \"categoryLimit\": null,\n        \"perItemSublimit\": null,\n        \"effectiveMaxPayoutUnderCurrentLimits\": 500\n      },\n      \"notes\": \"Consider increasing Tools coverage\"\n    },\n    {\n      \"name\": \"Sofa\",\n      \"category\": \"Furniture\",\n      \"unitReplacementCost\": 1800,\n      \"quantity\": 1,\n      \"totalReplacementCost\": 1800,\n      \"insuredPerUnit\": 1800,\n      \"totalInsured\": 1800,\n      \"shortfall\": 0,\n      \"policyConstraints\": {\n        \"categoryLimit\": null,\n        \"perItemSublimit\": null,\n        \"effectiveMaxPayoutUnderCurrentLimits\": 1800\n      },\n      \"notes\": \"Fully covered\"\n    }\n  ],\n  \"riskScore\": {\n    \"score\": 68,\n    \"level\": \"Moderate\",\n    \"factors\": [\n      {\n        \"name\": \"Underinsurance ratio\",\n        \"value\": \"46.4% shortfall (10,300 under replacement)\",\n        \"impact\": \"High\"\n      },\n      {\n        \"name\": \"Sublimit exposure\",\n        \"value\": \"3 items affected (Jewelry, Art, Bicycle)\",\n        \"impact\": \"High\"\n      },\n      {\n        \"name\": \"High-value concentration\",\n        \"value\": \"47.3% in Art & Jewelry\",\n        \"impact\": \"Medium\"\n      },\n      {\n        \"name\": \"Deductible impact\",\n        \"value\": \"$1,000 per claim\",\n        \"impact\": \"Medium\"\n      },\n      {\n        \"name\": \"Contents limit headroom\",\n        \"value\": \"Adequate (65,000 limit vs 22,200 need)\",\n        \"impact\": \"Low (positive)\"\n      }\n    ],\n    \"notes\": \"Primary risks are category and per-item sublimits on Art, Jewelry, and Bicycle, plus general underinsurance on Electronics and Tools.\"\n  },\n  \"coverageEstimates\": {\n    \"summary\": {\n      \"additionalCoverageRecommendedTotal\": 10300,\n      \"breakdownByCategory\": [\n        {\n          \"category\": \"Art\",\n          \"additionalCoverage\": 5000,\n          \"current\": 1000,\n          \"recommendedNewTotal\": 6000,\n          \"rationale\": \"Exceeds category sublimit; schedule artwork to full value\"\n        },\n        {\n          \"category\": \"Jewelry\",\n          \"additionalCoverage\": 2000,\n          \"current\": 2500,\n          \"recommendedNewTotal\": 4500,\n          \"rationale\": \"Capped by jewelry sublimit; schedule to full value\"\n        },\n        {\n          \"category\": \"Sports\",\n          \"additionalCoverage\": 1200,\n          \"current\": 1000,\n          \"recommendedNewTotal\": 2200,\n          \"rationale\": \"Bike limited by per-item sublimit; add bike endorsement\"\n        },\n        {\n          \"category\": \"Electronics\",\n          \"additionalCoverage\": 1400,\n          \"current\": 2500,\n          \"recommendedNewTotal\": 3900,\n          \"rationale\": \"Increase blanket coverage to match replacement\"\n        },\n        {\n          \"category\": \"Tools\",\n          \"additionalCoverage\": 700,\n          \"current\": 500,\n          \"recommendedNewTotal\": 1200,\n          \"rationale\": \"Increase blanket or item coverage\"\n        }\n      ],\n      \"contentsLimitAdequacy\": {\n        \"currentLimit\": 65000,\n        \"projectedNeeded\": 22200,\n        \"status\": \"Adequate\"\n      }\n    },\n    \"recommendations\": [\n      {\n        \"type\": \"Schedule\",\n        \"category\": \"Art\",\n        \"items\": [\n          \"Oil painting\"\n        ],\n        \"additionalCoverage\": 5000,\n        \"newTotalCoverage\": 6000,\n        \"estimatedAnnualPremiumRange\": \"$50\\u2013$150\",\n        \"notes\": \"Appraisal may be required; scheduling removes category sublimit.\"\n      },\n      {\n        \"type\": \"Schedule\",\n        \"category\": \"Jewelry\",\n        \"items\": [\n          \"Diamond ring\"\n        ],\n        \"additionalCoverage\": 2000,\n        \"newTotalCoverage\": 4500,\n        \"estimatedAnnualPremiumRange\": \"$20\\u2013$60\",\n        \"notes\": \"Appraisal typically required; scheduling removes jewelry sublimit.\"\n      },\n      {\n        \"type\": \"Endorsement\",\n        \"category\": \"Sports\",\n        \"items\": [\n          \"Road bike\"\n        ],\n        \"additionalCoverage\": 1200,\n        \"newTotalCoverage\": 2200,\n        \"estimatedAnnualPremiumRange\": \"$12\\u2013$36\",\n        \"notes\": \"Increase bicycle per-item limit or add bike-specific endorsement.\"\n      },\n      {\n        \"type\": \"Increase Blanket\",\n        \"category\": \"Electronics\",\n        \"items\": [\n          \"65\\\" TV\",\n          \"Laptop (2)\"\n        ],\n        \"additionalCoverage\": 1400,\n        \"newTotalCoverage\": 3900,\n        \"estimatedAnnualPremiumRange\": \"$14\\u2013$42\",\n        \"notes\": \"Per-item electronics sublimit (2,000) is not constraining current items.\"\n      },\n      {\n        \"type\": \"Increase Blanket\",\n        \"category\": \"Tools\",\n        \"items\": [\n          \"Power tools set\"\n        ],\n        \"additionalCoverage\": 700,\n        \"newTotalCoverage\": 1200,\n        \"estimatedAnnualPremiumRange\": \"$7\\u2013$21\",\n        \"notes\": \"Consider listing high-value tools or adding a tools rider.\"\n      }\n    ]\n  }\n}"
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Here\u2019s your snapshot based on the items and policy details you shared:\n\nHighlights\n- Total replacement cost: 22,200 USD; current item-level insured total: 11,900 USD. Your overall contents limit (65,000 USD) is ample, but several categories/items are underinsured at the item/rider level.\n- Biggest category shortfalls: Art (5,000), Jewelry (2,000), Electronics (1,400), Sports/Bike (1,200), Tools (700) USD.\n- Underinsured categories: Art, Jewelry, Electronics, Sports, Tools.\n\nRisk insight\n- Overall risk: Medium (score 55). Main drivers: high impact from jewelry/art/bike sublimits; moderate concentration in a few high-value items; strong headroom on overall contents limit.\n\nRecommendations (coverage focus)\n- Schedule or raise riders for:\n  \u2022 Art to ~6,000 USD (shortfall \u2248 4,000\u20135,000 depending on current rider levels and the 2,000 USD sublimit).\n  \u2022 Jewelry to ~4,500 USD (shortfall \u2248 2,000 USD vs. 2,500 USD sublimit).\n  \u2022 Bicycle to ~2,200 USD (shortfall \u2248 1,200 USD vs. 1,000 USD per-item sublimit).\n- Consider modest increases for:\n  \u2022 Electronics gap (\u2248 1,400 USD across TV and laptops) and Tools (\u2248 700 USD) if you want item-level parity with replacement values.\n- Contents limit: 65,000 USD is well above your current 22,200 USD exposure; no change needed unless you plan large purchases.\n\nNotes\n- Deductible (1,000 USD) applies before reimbursement; for smaller items, weigh whether increasing insured amounts is worthwhile considering the deductible.\n- Sublimits can cap payouts even if your overall contents limit is high; scheduling riders specifically for jewelry/art/bikes is usually the most cost-effective fix.\n\nIf you\u2019d like, share the rest of your inventory and I\u2019ll refresh these visuals and recommendations."
+          },
+          {
+            "type": "component",
+            "component": {
+              "name": "CategoryValuePieChart",
+              "props": {
+                "categoryNames": [
+                  "Electronics",
+                  "Jewelry",
+                  "Furniture",
+                  "Appliances",
+                  "Sports",
+                  "Tools",
+                  "Art",
+                  "Clothing"
+                ],
+                "totalValues": [
+                  3900,
+                  4500,
+                  1800,
+                  800,
+                  2200,
+                  1200,
+                  6000,
+                  1800
+                ],
+                "insuredValues": [
+                  2500,
+                  2500,
+                  1800,
+                  800,
+                  1000,
+                  500,
+                  1000,
+                  1800
+                ],
+                "currency": "USD",
+                "highlightedIndex": 6
+              }
+            }
+          },
+          {
+            "type": "component",
+            "component": {
+              "name": "HighValueItemTable",
+              "props": {
+                "lines": [
+                  "Oil painting | Art | 6000 | 1000 | 5000 | Yes",
+                  "Diamond ring | Jewelry | 4500 | 2500 | 2000 | Yes",
+                  "Road bike | Sports | 2200 | 1000 | 1200 | Yes",
+                  "Laptop (x2) | Electronics | 3000 | 2000 | 1000 | Yes",
+                  "Power tools set | Tools | 1200 | 500 | 700 | Yes",
+                  "65\" TV | Electronics | 900 | 500 | 400 | Yes",
+                  "Sofa | Furniture | 1800 | 1800 | 0 | No",
+                  "Washer | Appliances | 800 | 800 | 0 | No",
+                  "Winter coats (x3) | Clothing | 1800 | 1800 | 0 | No"
+                ],
+                "currency": "USD",
+                "sortBy": "gap",
+                "showUnderinsuredOnly": false,
+                "generatedAt": "2025-12-05T00:00:00.000Z"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": "Please render the category pie, high-value item table, risk scorecard, and coverage estimate cards from this sample. Also, what\u2019s the estimated total annual premium increase if I implement all recommendations, and would the $1,000 deductible apply to scheduled jewelry/art?",
+        "grading_guidance": {
+          "quality_criteria": [
+            "Uses a clear, professional, and helpful tone throughout",
+            "Addresses every part of the user's request, including rendering the requested visuals and answering the two insurance questions",
+            "Provides accurate, relevant, and scenario-appropriate information without overreaching",
+            "Clearly explains any assumptions or data needs if information is missing to produce estimates",
+            "Keeps the response concise and well-structured for easy scanning",
+            "Maintains consistency with the Home Inventory Insurance Estimator context",
+            "Avoids ambiguity and provides actionable next steps if needed",
+            "Ensures terminology is appropriate for insurance (e.g., deductible applicability, scheduled items) and easy to understand"
+          ],
+          "expected_components": [
+            "CoverageEstimateCards",
+            "CategoryValuePieChart"
+          ]
+        }
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Absolutely\u2014here are the visuals and the answers to your questions based on your sample:\n\nSummary insights\n- Overall exposure: $22,200 replacement vs. $11,900 currently insured at the item/category level (contents limit of $65,000 remains adequate).\n- Biggest underinsured areas: Art, Jewelry, Electronics, Sports (bike), Tools.\n- Risk snapshot: Moderate (score 68). Main drivers: high sublimit exposure (Art/Jewelry/Bike), notable underinsurance ratio, and concentration in a few high-value pieces.\n\nEstimated premium impact and deductible\n- Estimated total annual premium increase if you implement all recommendations: about $103\u2013$309 per year (sum of all category/item suggestions).\n- Deductible on scheduled items: Typically, scheduled jewelry and fine art are covered with a $0 deductible on many policies once scheduled. Unscheduled items remain subject to your $1,000 deductible. Carrier forms vary\u2014confirm with your insurer when adding schedules/endorsements.\n\nHigh-value items to watch (highlights)\n- Oil painting (Art): $6,000 replacement vs. $1,000 insured \u2192 $5,000 gap; limited by Art sublimit\u2014schedule recommended.\n- Diamond ring (Jewelry): $4,500 vs. $2,500 \u2192 $2,000 gap; capped by Jewelry sublimit\u2014schedule recommended.\n- Road bike (Sports): $2,200 vs. $1,000 \u2192 $1,200 gap; limited by bike per-item sublimit\u2014endorsement recommended.\n- Electronics/tools: TV + laptops and power tools have smaller but meaningful gaps.\n\nIf you want, I can also render the risk scorecard and category-level coverage cards in a follow-up."
+          },
+          {
+            "type": "component",
+            "component": {
+              "name": "CategoryValuePieChart",
+              "props": {
+                "categoryNames": [
+                  "Art",
+                  "Jewelry",
+                  "Electronics",
+                  "Sports",
+                  "Furniture",
+                  "Clothing",
+                  "Tools",
+                  "Appliances"
+                ],
+                "totalValues": [
+                  6000,
+                  4500,
+                  3900,
+                  2200,
+                  1800,
+                  1800,
+                  1200,
+                  800
+                ],
+                "insuredValues": [
+                  1000,
+                  2500,
+                  2500,
+                  1000,
+                  1800,
+                  1800,
+                  500,
+                  800
+                ],
+                "currency": "USD",
+                "highlightedIndex": 0
+              }
+            }
+          },
+          {
+            "type": "component",
+            "component": {
+              "name": "HighValueItemTable",
+              "props": {
+                "lines": [
+                  "Oil painting | Art | $6,000 | $1,000 | $5,000 | Yes",
+                  "Diamond ring | Jewelry | $4,500 | $2,500 | $2,000 | Yes",
+                  "Road bike | Sports | $2,200 | $1,000 | $1,200 | Yes",
+                  "Laptop (2) | Electronics | $3,000 | $2,000 | $1,000 | Yes",
+                  "Power tools set | Tools | $1,200 | $500 | $700 | Yes",
+                  "Sofa | Furniture | $1,800 | $1,800 | $0 | No"
+                ],
+                "currency": "USD",
+                "sortBy": "gap",
+                "showUnderinsuredOnly": false,
+                "generatedAt": "2025-12-05T00:00:00Z"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": "Can you render the category pie, high\u2011value item table, risk scorecard, and coverage estimate cards as embeddable images and share a CSV of the high\u2011value items? Please also break out the estimated premium range per recommendation and confirm whether scheduled jewelry/art typically have a $0 deductible (and what to ask my carrier to verify). Lastly, what\u2019s the best way to send my full inventory\u2014upload a CSV here or provide a link?",
+        "grading_guidance": {
+          "quality_criteria": [
+            "Friendly, concise, and professional tone; clearly structured with bullets or short sections",
+            "Fully addresses each part of the request: image-ready visuals, CSV sharing for high-value items, premium range per recommendation, deductible confirmation guidance, and instructions for sending the full inventory",
+            "Provides accurate, practical insurance information, including typical practices (e.g., scheduling jewelry/art) with clear caveats that specifics vary by carrier and policy",
+            "Explains any limitations or prerequisites for producing embeddable images and CSVs, and offers clear next steps or alternatives",
+            "Breaks out estimated premium ranges per recommendation and notes assumptions/estimates without overpromising or implying guarantees",
+            "Includes a concise checklist of questions to ask the carrier about scheduled items (deductible, sublimits, valuation method, appraisals, coverage scope, exclusions)",
+            "Gives clear guidance on how to submit the full inventory (CSV upload vs link), including preferred formats, sample headers, and privacy/sharing considerations",
+            "Maintains conversational flow, avoids jargon, and uses user-centered language focused on outcomes"
+          ],
+          "expected_components": [
+            "HighValueItemTable",
+            "CoverageEstimateCards"
+          ]
+        }
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Got it\u2014here are the visuals (2 embedded), the CSV for high\u2011value items, premium ranges by recommendation, deductible guidance, and how to share your full inventory.\n\nEmbedded visuals (2 of 4)\n- I\u2019ve embedded the High\u2011value Items table and Coverage Estimate cards below. I can render the Category Pie and Risk Scorecard as images next\u2014just say the word.\n\nPremium impact and deductible\n- Estimated total annual premium increase (all recommendations): $103\u2013$309 per year.\n- Breakdown by recommendation:\n  \u2022 Art (Schedule Oil painting): $50\u2013$150 per year\n  \u2022 Jewelry (Schedule Diamond ring): $20\u2013$60 per year\n  \u2022 Sports (Bike endorsement for Road bike): $12\u2013$36 per year\n  \u2022 Electronics (Increase blanket): $14\u2013$42 per year\n  \u2022 Tools (Increase blanket): $7\u2013$21 per year\n- Deductible on scheduled items: Typically $0 deductible for scheduled jewelry and fine art on many homeowners/ renters policies once scheduled. Unscheduled items generally remain subject to your $1,000 deductible. Carrier forms vary\u2014ask your insurer to confirm:\n  \u2022 Whether Scheduled Personal Property (SPP) items have a $0 deductible\n  \u2022 If coverage is agreed value vs. replacement cost and any appraisal requirements\n  \u2022 Which perils are covered (mysterious disappearance/accidental loss, worldwide coverage)\n  \u2022 Whether scheduling fully removes category/per\u2011item sublimits\n  \u2022 How claims are settled and documentation needed\n\nCategory mix and risk snapshot (text summary)\n- Category share by replacement value: Art $6,000; Jewelry $4,500; Electronics $3,900; Sports $2,200; Furniture $1,800; Clothing $1,800; Tools $1,200; Appliances $800 (Total $22,200).\n- Overall risk score: 68 (Moderate). Key drivers: high sublimit exposure (Art/Jewelry/Bike), 46.4% underinsurance shortfall, and concentration in Art/Jewelry.\n\nHigh\u2011value items CSV\n\"Name\",\"Category\",\"UnitReplacementCost\",\"Quantity\",\"TotalReplacementCost\",\"InsuredPerUnit\",\"TotalInsured\",\"Shortfall\",\"CategoryLimit\",\"PerItemSublimit\",\"EffectiveMaxPayoutUnderCurrentLimits\",\"Notes\"\n\"Oil painting\",\"Art\",6000,1,6000,1000,1000,5000,2000,,1000,\"Exceeds Art category limit; recommend scheduling\"\n\"Diamond ring\",\"Jewelry\",4500,1,4500,2500,2500,2000,2500,,2500,\"Capped by Jewelry category limit; schedule to remove sublimit\"\n\"Road bike\",\"Sports\",2200,1,2200,1000,1000,1200,,1000,1000,\"Limited by bicycle per-item sublimit; consider bike endorsement\"\n\"Laptop\",\"Electronics\",1500,2,3000,1000,2000,1000,,2000,2000,\"Underinsured vs replacement (sublimit not constraining)\"\n\"Power tools set\",\"Tools\",1200,1,1200,500,500,700,,,,500,\"Consider increasing Tools coverage\"\n\"Sofa\",\"Furniture\",1800,1,1800,1800,1800,0,,,,1800,\"Fully covered\"\n\nHow to share your full inventory\n- Best: Upload a CSV here so I can parse and update all visuals automatically. Include columns like: Name, Category, UnitReplacementCost, Quantity, InsuredPerUnit (or InsuredTotal), Notes.\n- Or: Share a direct link to a CSV/JSON (public or with access). I can fetch the file if it\u2019s accessible and then refresh the charts, tables, and recommendations.\n\nWant me to render the Category Pie and Risk Scorecard as images now?"
+          },
+          {
+            "type": "component",
+            "component": {
+              "name": "HighValueItemTable",
+              "props": {
+                "lines": [
+                  "Oil painting | Art | 6000 | 1000 | 5000 | Yes",
+                  "Diamond ring | Jewelry | 4500 | 2500 | 2000 | Yes",
+                  "Road bike | Sports | 2200 | 1000 | 1200 | Yes",
+                  "Laptop | Electronics | 3000 | 2000 | 1000 | Yes",
+                  "Power tools set | Tools | 1200 | 500 | 700 | Yes",
+                  "Sofa | Furniture | 1800 | 1800 | 0 | No"
+                ],
+                "currency": "USD",
+                "generatedAt": "2025-12-05T00:00:00Z"
+              }
+            }
+          },
+          {
+            "type": "component",
+            "component": {
+              "name": "CoverageEstimateCards",
+              "props": {
+                "labels": [
+                  "Art",
+                  "Jewelry",
+                  "Sports",
+                  "Electronics",
+                  "Tools"
+                ],
+                "categories": [
+                  "category",
+                  "category",
+                  "category",
+                  "category",
+                  "category"
+                ],
+                "suggestedLimits": [
+                  6000,
+                  4500,
+                  2200,
+                  3900,
+                  1200
+                ],
+                "shortfalls": [
+                  5000,
+                  2000,
+                  1200,
+                  1400,
+                  700
+                ],
+                "currency": "USD"
+              }
+            }
+          }
+        ]
+      }
+    ];
+
+    // Utilities
+    const formatCurrency = (value, currency = 'USD') => {
+      if (value === null || value === undefined || isNaN(value)) return '-';
+      try {
+        return new Intl.NumberFormat(undefined, {
+          style: 'currency',
+          currency,
+          maximumFractionDigits: 0
+        }).format(value);
+      } catch (e) {
+        return `${currency} ${Math.round(value).toLocaleString()}`;
+      }
+    };
+
+    const parseCurrencyish = (text) => {
+      if (text === null || text === undefined) return 0;
+      const num = parseFloat(String(text).replace(/[^0-9.-]/g, ''));
+      return isNaN(num) ? 0 : num;
+    };
+
+    const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+
+    const palette = [
+      '#4f46e5', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#84cc16', '#ec4899',
+      '#0ea5e9', '#e11d48', '#10b981', '#b45309'
+    ];
+
+    // Components
+    const InventoryInsuranceOverview = (props) => {
+      const {
+        currency = 'USD',
+        totalReplacementCost = 0,
+        insuredAmount = 0,
+        riskLevel = 'moderate',
+        underinsuredCategories = []
+      } = props;
+
+      const coverageRatio = totalReplacementCost > 0 ? insuredAmount / totalReplacementCost : 0;
+      const percent = Math.round(coverageRatio * 100);
+
+      const rl = String(riskLevel || '').toLowerCase();
+      const riskColor = rl === 'low' ? 'text-emerald-600 bg-emerald-50'
+                      : rl === 'high' ? 'text-rose-600 bg-rose-50'
+                      : 'text-amber-600 bg-amber-50';
+
+      return (
+        <div className="w-full bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h3 className="text-lg font-semibold text-gray-900">Inventory Insurance Overview</h3>
+            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${riskColor}`}>
+              Risk: {rl.charAt(0).toUpperCase() + rl.slice(1)}
+            </span>
+          </div>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-4 rounded-lg bg-gray-50">
+              <div className="text-sm text-gray-500">Total replacement cost</div>
+              <div className="text-xl font-semibold text-gray-900">{formatCurrency(totalReplacementCost, currency)}</div>
+            </div>
+            <div className="p-4 rounded-lg bg-gray-50">
+              <div className="text-sm text-gray-500">Currently insured</div>
+              <div className="text-xl font-semibold text-gray-900">{formatCurrency(insuredAmount, currency)}</div>
+            </div>
+            <div className="p-4 rounded-lg bg-gray-50">
+              <div className="text-sm text-gray-500">Coverage ratio</div>
+              <div className="text-xl font-semibold text-gray-900">{percent}%</div>
+              <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+                <div className="bg-indigo-600 h-2 rounded-full" style={{ width: `${clamp(percent, 0, 100)}%` }} />
+              </div>
+            </div>
+          </div>
+          <div className="mt-4">
+            <div className="text-sm text-gray-600 mb-2">Underinsured categories</div>
+            {Array.isArray(underinsuredCategories) && underinsuredCategories.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {underinsuredCategories.map((c, i) => (
+                  <span key={i} className="px-2.5 py-1 rounded-full text-xs bg-rose-50 text-rose-700 border border-rose-200">{c}</span>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-400">None flagged</div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    const CategoryValuePieChart = (props) => {
+      const {
+        categoryNames = [],
+        totalValues = [],
+        insuredValues = [],
+        currency = 'USD',
+        highlightedIndex = -1
+      } = props;
+
+      const data = useMemo(() => {
+        const items = categoryNames.map((name, i) => {
+          const total = parseFloat(totalValues[i] ?? 0);
+          const insured = parseFloat(insuredValues[i] ?? 0);
+          const ratio = total > 0 ? insured / total : 0;
+          return { name, total, insured, ratio, color: palette[i % palette.length] };
+        }).filter(d => d.total > 0);
+        const totalSum = items.reduce((a, b) => a + b.total, 0);
+        return { items, totalSum };
+      }, [categoryNames, totalValues, insuredValues]);
+
+      const size = 220;
+      const cx = size / 2;
+      const cy = size / 2;
+      const outerR = 100;
+      const strokeW = 26;
+
+      const describeArc = (cx, cy, r, startAngle, endAngle) => {
+        const rad = Math.PI / 180;
+        const sx = cx + r * Math.cos((startAngle - 90) * rad);
+        const sy = cy + r * Math.sin((startAngle - 90) * rad);
+        const ex = cx + r * Math.cos((endAngle - 90) * rad);
+        const ey = cy + r * Math.sin((endAngle - 90) * rad);
+        const largeArc = endAngle - startAngle <= 180 ? 0 : 1;
+        return `M ${sx} ${sy} A ${r} ${r} 0 ${largeArc} 1 ${ex} ${ey}`;
+      };
+
+      let angleStart = 0;
+      const arcs = [];
+      data.items.forEach((d, i) => {
+        const fraction = data.totalSum > 0 ? d.total / data.totalSum : 0;
+        const angle = fraction * 360;
+        const angleEnd = angleStart + angle;
+        arcs.push({
+          path: describeArc(cx, cy, outerR, angleStart, angleEnd),
+          color: d.color,
+          index: i,
+          value: d.total,
+          name: d.name,
+          fraction
+        });
+        angleStart = angleEnd;
+      });
+
+      return (
+        <div className="w-full bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Category Value Pie</h3>
+            <div className="text-sm text-gray-500">Total {formatCurrency(data.totalSum, currency)}</div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="flex items-center justify-center">
+              <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Category distribution donut chart">
+                <circle cx={cx} cy={cy} r={outerR} fill="#ffffff" />
+                {arcs.map((a, i) => (
+                  <path
+                    key={i}
+                    d={a.path}
+                    stroke={a.color}
+                    strokeWidth={strokeW}
+                    fill="none"
+                    opacity={highlightedIndex === a.index || highlightedIndex === -1 ? 0.95 : 0.35}
+                    strokeLinecap="butt"
+                  />
+                ))}
+                {/* Inner white circle to create donut */}
+                <circle cx={cx} cy={cy} r={outerR - strokeW} fill="white" />
+                <text x={cx} y={cy - 6} textAnchor="middle" className="fill-gray-600" style={{ fontSize: 12 }}>Coverage</text>
+                <text x={cx} y={cy + 12} textAnchor="middle" className="fill-gray-900" style={{ fontSize: 18, fontWeight: 700 }}>
+                  {data.totalSum ? `${Math.round((insuredValues.reduce((a, b) => a + (b || 0), 0) / data.totalSum) * 100)}%` : '-'}
+                </text>
+              </svg>
+            </div>
+            <div className="space-y-3">
+              {data.items.map((d, i) => {
+                const current = d.insured;
+                const barPct = d.total > 0 ? clamp((current / d.total) * 100, 0, 100) : 0;
+                return (
+                  <div key={i} className="border border-gray-100 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: d.color }} />
+                        <span className="text-sm font-medium text-gray-900">{d.name}</span>
+                      </div>
+                      <div className="text-sm text-gray-600">{formatCurrency(d.total, currency)}</div>
+                    </div>
+                    <div className="mt-2">
+                      <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                        <div className="h-2 bg-indigo-600" style={{ width: `${barPct}%` }} />
+                      </div>
+                      <div className="mt-1 text-xs text-gray-600 flex items-center justify-between">
+                        <span>Insured: {formatCurrency(current, currency)}</span>
+                        <span className={barPct < 100 ? "text-rose-600" : "text-emerald-600"}>{Math.round(barPct)}%</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {data.items.length === 0 && (
+                <div className="text-sm text-gray-500">No category data provided.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const HighValueItemTable = (props) => {
+      const {
+        lines = [],
+        currency = 'USD',
+        sortBy = 'gap',
+        showUnderinsuredOnly = false,
+        generatedAt
+      } = props;
+
+      const [localSort, setLocalSort] = useState(sortBy);
+      const [underOnly, setUnderOnly] = useState(showUnderinsuredOnly);
+
+      const rows = useMemo(() => {
+        const parsed = (Array.isArray(lines) ? lines : []).map((line, idx) => {
+          const parts = String(line).split('|').map(p => p.trim());
+          // Expected: name | category | replacement | insured | gap | underinsured?
+          const name = parts[0] ?? `Item ${idx + 1}`;
+          const category = parts[1] ?? '';
+          const replacement = parseCurrencyish(parts[2] ?? 0);
+          const insured = parseCurrencyish(parts[3] ?? 0);
+          const gap = parseCurrencyish(parts[4] ?? (replacement - insured));
+          const under = (parts[5] ?? '').toString().toLowerCase().startsWith('y') || gap > 0;
+          return { name, category, replacement, insured, gap, under };
+        });
+        return parsed;
+      }, [lines]);
+
+      const filteredSorted = useMemo(() => {
+        let arr = rows.slice();
+        if (underOnly) arr = arr.filter(r => r.under && r.gap > 0.0001);
+        if (localSort === 'replacementCost') {
+          arr.sort((a, b) => b.replacement - a.replacement);
+        } else if (localSort === 'gap') {
+          arr.sort((a, b) => b.gap - a.gap);
+        }
+        return arr;
+      }, [rows, underOnly, localSort]);
+
+      const totalReplacement = rows.reduce((a, b) => a + b.replacement, 0);
+      const totalInsured = rows.reduce((a, b) => a + b.insured, 0);
+      const totalGap = rows.reduce((a, b) => a + b.gap, 0);
+
+      return (
+        <div className="w-full bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h3 className="text-lg font-semibold text-gray-900">High-Value Items</h3>
+            <div className="flex items-center gap-3">
+              <label className="text-sm text-gray-700">Sort by:</label>
+              <select
+                value={localSort}
+                onChange={(e) => setLocalSort(e.target.value)}
+                className="text-sm rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                <option value="gap">Coverage gap</option>
+                <option value="replacementCost">Replacement cost</option>
+              </select>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={underOnly}
+                  onChange={(e) => setUnderOnly(e.target.checked)}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                Underinsured only
+              </label>
+            </div>
+          </div>
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Replacement</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Insured</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Gap</th>
+                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Underinsured</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {filteredSorted.map((r, i) => (
+                  <tr key={i} className={r.under && r.gap > 0 ? "bg-rose-50/30" : ""}>
+                    <td className="px-4 py-2 text-sm text-gray-900">{r.name}</td>
+                    <td className="px-4 py-2 text-sm text-gray-600">{r.category}</td>
+                    <td className="px-4 py-2 text-sm text-right text-gray-900">{formatCurrency(r.replacement, currency)}</td>
+                    <td className="px-4 py-2 text-sm text-right text-gray-900">{formatCurrency(r.insured, currency)}</td>
+                    <td className={`px-4 py-2 text-sm text-right ${r.gap > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      {formatCurrency(r.gap, currency)}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-center">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${r.under && r.gap > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                        {r.under && r.gap > 0 ? 'Yes' : 'No'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {filteredSorted.length === 0 && (
+                  <tr>
+                    <td colSpan="6" className="px-4 py-6 text-sm text-gray-500 text-center">No items to display.</td>
+                  </tr>
+                )}
+              </tbody>
+              <tfoot className="bg-gray-50">
+                <tr>
+                  <td className="px-4 py-2 text-sm font-medium text-gray-700" colSpan="2">Totals</td>
+                  <td className="px-4 py-2 text-sm text-right font-medium text-gray-900">{formatCurrency(totalReplacement, currency)}</td>
+                  <td className="px-4 py-2 text-sm text-right font-medium text-gray-900">{formatCurrency(totalInsured, currency)}</td>
+                  <td className="px-4 py-2 text-sm text-right font-medium text-gray-900">{formatCurrency(totalGap, currency)}</td>
+                  <td className="px-4 py-2"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {generatedAt && (
+            <div className="mt-3 text-xs text-gray-500">Generated {new Date(generatedAt).toLocaleString()}</div>
+          )}
+        </div>
+      );
+    };
+
+    const RiskRatingScorecard = (props) => {
+      const {
+        overallScore = 0,
+        riskLevel = 'medium',
+        driverLabels = [],
+        driverImpacts = [],
+        scoringMethodNote = ''
+      } = props;
+
+      const score = clamp(Math.round(overallScore), 0, 100);
+      const rl = String(riskLevel || '').toLowerCase();
+      const normalizedLevel =
+        rl === 'low' || rl === 'medium' || rl === 'high' ? rl :
+        rl.startsWith('mod') ? 'medium' :
+        rl.startsWith('med') ? 'medium' : rl;
+
+      const color = normalizedLevel === 'low' ? '#10b981' : normalizedLevel === 'high' ? '#ef4444' : '#f59e0b';
+      const bgBadge = normalizedLevel === 'low' ? 'bg-emerald-50 text-emerald-700'
+                    : normalizedLevel === 'high' ? 'bg-rose-50 text-rose-700'
+                    : 'bg-amber-50 text-amber-700';
+
+      const size = 140;
+      const cx = size / 2, cy = size / 2, r = 60, strokeW = 14;
+      const circumference = 2 * Math.PI * r;
+      const progress = (score / 100) * circumference;
+
+      const drivers = useMemo(() => {
+        if (Array.isArray(driverLabels) && driverLabels.length && Array.isArray(driverImpacts) && driverImpacts.length) {
+          return driverLabels.map((label, i) => {
+            const d = driverImpacts[i];
+            // Accept strings or objects
+            if (typeof d === 'string') {
+              return { label, detail: d };
+            } else if (d && typeof d === 'object') {
+              const impact = d.impact ?? d.level ?? '';
+              const value = d.value ?? d.detail ?? '';
+              return { label, detail: [impact, value].filter(Boolean).join(' — ') || '(no detail)' };
+            }
+            return { label, detail: '' };
+          });
+        }
+        // Fallback: flatten driverImpacts if labels missing
+        if (Array.isArray(driverImpacts)) {
+          return driverImpacts.map((d, i) => {
+            if (typeof d === 'string') return { label: `Driver ${i + 1}`, detail: d };
+            if (d && typeof d === 'object') {
+              const name = d.name ?? `Driver ${i + 1}`;
+              const impact = d.impact ?? '';
+              const value = d.value ?? '';
+              return { label: name, detail: [impact, value].filter(Boolean).join(' — ') };
+            }
+            return { label: `Driver ${i + 1}`, detail: '' };
+          });
+        }
+        return [];
+      }, [driverLabels, driverImpacts]);
+
+      return (
+        <div className="w-full bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-start gap-5">
+            <div className="relative">
+              <svg width={size} height={size}>
+                <circle cx={cx} cy={cy} r={r} stroke="#e5e7eb" strokeWidth={strokeW} fill="none" />
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={r}
+                  stroke={color}
+                  strokeWidth={strokeW}
+                  fill="none"
+                  strokeDasharray={`${progress} ${circumference - progress}`}
+                  strokeLinecap="round"
+                  transform={`rotate(-90 ${cx} ${cy})`}
+                />
+                <text x={cx} y={cy - 4} textAnchor="middle" className="fill-gray-900" style={{ fontSize: 20, fontWeight: 700 }}>{score}</text>
+                <text x={cx} y={cy + 14} textAnchor="middle" className="fill-gray-500" style={{ fontSize: 12 }}>Risk</text>
+              </svg>
+              <div className={`absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-xs font-medium ${bgBadge}`}>
+                {normalizedLevel.charAt(0).toUpperCase() + normalizedLevel.slice(1)}
+              </div>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-gray-900">Risk Rating Scorecard</h3>
+              <ul className="mt-3 space-y-2">
+                {drivers.map((d, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="mt-1 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{d.label}</div>
+                      <div className="text-sm text-gray-600">{d.detail}</div>
+                    </div>
+                  </li>
+                ))}
+                {drivers.length === 0 && (
+                  <li className="text-sm text-gray-500">No driver details provided.</li>
+                )}
+              </ul>
+              {scoringMethodNote && (
+                <div className="mt-3 text-xs text-gray-500">{scoringMethodNote}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const CoverageEstimateCards = (props) => {
+      const {
+        labels = [],
+        categories = [],
+        suggestedLimits = [],
+        shortfalls = [],
+        currency = 'USD'
+      } = props;
+
+      const items = useMemo(() => {
+        const len = Math.max(labels.length, suggestedLimits.length, shortfalls.length);
+        const list = [];
+        for (let i = 0; i < len; i++) {
+          const label = labels[i] ?? `Category ${i + 1}`;
+          const suggested = parseFloat(suggestedLimits[i] ?? 0);
+          const shortfall = parseFloat(shortfalls[i] ?? 0);
+          const current = Math.max(0, suggested - shortfall);
+          const coveragePct = suggested > 0 ? clamp((current / suggested) * 100, 0, 100) : 0;
+          list.push({
+            label,
+            suggested,
+            shortfall,
+            current,
+            coveragePct,
+            color: palette[i % palette.length]
+          });
+        }
+        return list;
+      }, [labels, suggestedLimits, shortfalls]);
+
+      return (
+        <div className="w-full bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Coverage Estimate Cards</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {items.map((it, i) => (
+              <div key={i} className="border border-gray-100 rounded-lg p-4 hover:shadow-sm transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium text-gray-900">{it.label}</div>
+                  <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: it.color }} />
+                </div>
+                <div className="mt-2 text-sm text-gray-600">Suggested limit</div>
+                <div className="text-base font-semibold text-gray-900">{formatCurrency(it.suggested, currency)}</div>
+
+                <div className="mt-3">
+                  <div className="flex items-center justify-between text-xs text-gray-600">
+                    <span>Current</span>
+                    <span>{formatCurrency(it.current, currency)}</span>
+                  </div>
+                  <div className="h-2 w-full bg-gray-200 rounded-full mt-1 overflow-hidden">
+                    <div className="h-2 bg-indigo-600" style={{ width: `${it.coveragePct}%` }} />
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between">
+                  <div className="text-sm text-gray-600">Shortfall</div>
+                  <div className="text-sm font-medium text-rose-600">{formatCurrency(it.shortfall, currency)}</div>
+                </div>
+              </div>
+            ))}
+            {items.length === 0 && (
+              <div className="text-sm text-gray-500">No coverage estimates available.</div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    // Registry
+    const ComponentRegistry = {
+      InventoryInsuranceOverview: InventoryInsuranceOverview,
+      CategoryValuePieChart: CategoryValuePieChart,
+      HighValueItemTable: HighValueItemTable,
+      RiskRatingScorecard: RiskRatingScorecard,
+      CoverageEstimateCards: CoverageEstimateCards
+    };
+
+    const ComponentRenderer = ({ componentName, props }) => {
+      const Component = ComponentRegistry[componentName];
+      if (!Component) {
+        return (
+          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-sm text-yellow-800">Component "{componentName}" not found</p>
+          </div>
+        );
+      }
+      return <Component {...(props || {})} />;
+    };
+
+    // Message content rendering
+    const ContentChunkRenderer = ({ chunk }) => {
+      if (!chunk) return null;
+      if (typeof chunk === 'string') {
+        return <p className="whitespace-pre-wrap text-gray-900">{chunk}</p>;
+      }
+      if (chunk.type === 'text') {
+        return <p className="whitespace-pre-wrap text-gray-900">{chunk.text || ''}</p>;
+      }
+      if (chunk.type === 'component' && chunk.component) {
+        const { name, props } = chunk.component;
+        return (
+          <div className="mt-3">
+            <ComponentRenderer componentName={name} props={props} />
+          </div>
+        );
+      }
+      // Fallback: render JSON
+      return (
+        <pre className="text-xs bg-gray-50 p-3 rounded border border-gray-200 overflow-auto">
+{JSON.stringify(chunk, null, 2)}
+        </pre>
+      );
+    };
+
+    const Avatar = ({ role }) => {
+      const base = "flex items-center justify-center w-8 h-8 rounded-full text-white text-sm font-semibold";
+      if (role === 'user') return <div className={`${base} bg-indigo-600`}>U</div>;
+      if (role === 'assistant') return <div className={`${base} bg-emerald-600`}>A</div>;
+      if (role === 'tool') return <div className={`${base} bg-amber-600`}>T</div>;
+      return <div className={`${base} bg-gray-600`}>S</div>;
+    };
+
+    const MessageBubble = ({ message }) => {
+      const role = message.role || 'assistant';
+      const alignment = role === 'user' ? 'items-end' : 'items-start';
+      const bubbleBg = role === 'user' ? 'bg-indigo-600 text-white' : role === 'assistant' ? 'bg-white text-gray-900' : 'bg-gray-100 text-gray-800';
+      const borderClass = role === 'assistant' ? 'border border-gray-200' : role === 'tool' ? 'border border-gray-200' : '';
+      const content = message.content;
+
+      const renderContent = () => {
+        if (Array.isArray(content)) {
+          return content.map((chunk, i) => <ContentChunkRenderer key={i} chunk={chunk} />);
+        }
+        if (typeof content === 'string') {
+          return <ContentChunkRenderer chunk={{ type: 'text', text: content }} />;
+        }
+        return <ContentChunkRenderer chunk={content} />;
+      };
+
+      return (
+        <div className={`w-full flex ${alignment} gap-3`}>
+          <Avatar role={role} />
+          <div className={`max-w-3xl w-full rounded-2xl px-4 py-3 ${bubbleBg} ${borderClass}`}>
+            {renderContent()}
+          </div>
+        </div>
+      );
+    };
+
+    const ConversationView = ({ conversation = [] }) => {
+      return (
+        <div className="min-h-screen">
+          <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+            <div className="max-w-6xl mx-auto px-4 py-4">
+              <h1 className="text-xl font-semibold text-gray-900">Conversation Viewer</h1>
+              <p className="text-sm text-gray-600">Visualizing UI component conversation for Home Inventory Insurance Estimator</p>
+            </div>
+          </header>
+          <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+            {Array.isArray(conversation) && conversation.map((msg, idx) => (
+              <MessageBubble key={idx} message={msg} />
+            ))}
+          </main>
+          <footer className="py-6 text-center text-xs text-gray-500">
+            Built with React, Babel, and Tailwind CSS
+          </footer>
+        </div>
+      );
+    };
+
+    const rootEl = document.getElementById("root");
+    if (rootEl) {
+      const root = createRoot(rootEl);
+      root.render(<ConversationView conversation={conversationData} />);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plan my next 6 weeks of newsletter issues with topics, CTAs, and draft status.</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { margin: 0; padding: 0; background: #f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    #root { min-height: 100vh; }
+    * { box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
+    const { createRoot } = ReactDOM;
+
+    // Conversation data
+    const conversationData = [
+  {
+    "role": "user",
+    "content": "Plan my next 6 weeks of newsletter issues with topics, CTAs, and draft status.",
+    "grading_guidance": {
+      "quality_criteria": [
+        "Asks 4\u20136 targeted clarifying questions covering: newsletter niche/topic focus, target audience, weekly cadence and preferred publish day/time with start date/timezone, primary goals per issue (to inform CTAs) and any specific offers/links, desired status workflow (e.g., Ideas, Drafting, Ready, Scheduled, Sent), and any pre-existing ideas/backlog or key dates/events to align with over the next 6 weeks",
+        "Explicitly acknowledges the user's scope of 'next 6 weeks' and required fields 'topics, CTAs, and draft status', while avoiding generating any schedule, placeholder topics, or CTAs before receiving the above inputs",
+        "Explains what will be produced once clarified: a NewsletterCalendarBoard with a 6-week view containing IssueCards (each showing topic, CTA, and a StatusChip) and a BacklogIdea list for unscheduled ideas",
+        "Confirms practical details that impact scheduling accuracy: timezone and whether issues are weekly (one per week) or more/less frequent, plus any blackout dates",
+        "Offers an opt-in fallback: proposes to generate a first-pass plan using common themes in their niche only if the user prefers to skip details, and asks for confirmation before proceeding"
+      ],
+      "expected_components": []
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I\u2019d love to build a precise 6\u2011week newsletter calendar. A few details will help me tailor topics, CTAs, and draft statuses:\n\n1) Foundation\n- Niche/industry and primary audience (e.g., SaaS founders, fitness enthusiasts)\n- Main goal for the next 6 weeks (list growth, sales, engagement, education)\n- Brand voice/tone (e.g., friendly, data\u2011driven, witty)\n\n2) Scheduling\n- Start date for the 6\u2011week window and your timezone\n- Send cadence (weekly? specific weekday/time?)\n- Any blackout dates, holidays, launches, or events to align with?\n\n3) Content & Mix\n- Content types you want (how\u2011to, case study, trend analysis, interview, curation, product updates)\n- Known topics or must\u2011cover themes\n- Desired length/read time target (e.g., ~5\u20137 minutes)\n- Any sources, links, or assets to include (blog posts, reports, videos)\n\n4) CTAs\n- Primary CTA types to rotate (e.g., book a demo, download guide, join webinar, follow on social, reply for feedback)\n- Any specific offers, lead magnets, or pages to feature\n\n5) Workflow & Status\n- Current draft status of any in\u2011progress issues (if any)\n- Author(s) to display and whether you use cover images\n- Review/approval steps to reflect in statuses (planned, draft, scheduled, sent)\n\n6) Backlog\n- Do you have existing backlog ideas to include? If yes, share topics/notes/priority.\n\nShare whatever you have (even partial). With that, I\u2019ll produce a 6\u2011week calendar view with scheduled issues (topics, CTAs, statuses) plus a backlog list for unscheduled ideas."
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": "Audience: B2B SaaS marketers; goal: list growth + demo signups; tone: pragmatic, friendly. Start week of Jan 6, 2025 (ET); send Tuesdays 10am ET; no blackout dates except a webinar on Jan 28 to promote; content mix: how\u2011to, case study, trend analysis, interview, curation, product update; key themes: AI in marketing ops, attribution, email deliverability, lifecycle onboarding, PLG metrics, Q1 planning; 5\u20137 min read; sources: our blog + new ebook and benchmark report (links available). CTAs: book a demo, download the ebook, register for the Jan 28 webinar, reply with a question, follow on LinkedIn; workflow: Planned > Draft > In review > Scheduled > Sent; author: Alex; cover images: yes; current drafts: \u201cAI for UTM Sanity\u201d at 40% and \u201cWelcome Flows Teardown\u201d outline only; backlog: churn\u2011reduction case study, deliverability toolkit, attribution frameworks, interview with a RevOps lead, curation of 5 must\u2011read PLG posts.",
+    "grading_guidance": {
+      "quality_criteria": [
+        "Schedules exactly six Tuesday sends at 10am ET starting the week of Jan 6, 2025: Jan 7, 14, 21, 28, Feb 4, Feb 11, and explicitly notes ET.",
+        "Plans one issue to promote the Jan 28 webinar with the primary CTA 'register for the Jan 28 webinar' and content that fits a promo (e.g., teaser, agenda, speaker highlights).",
+        "Covers the full requested content mix across the six issues (how\u2011to, case study, trend analysis, interview, curation, product update), with no duplicates left out.",
+        "Aligns topics to the provided key themes (AI in marketing ops, attribution, email deliverability, lifecycle onboarding, PLG metrics, Q1 planning) and keeps each issue to a 5\u20137 minute read with sources from the blog/ebook/benchmark report.",
+        "Applies workflow statuses using the given options: marks 'AI for UTM Sanity' as Draft (40%) and 'Welcome Flows Teardown' as Draft or Planned (outline), sets other future issues to Planned (not Sent), optionally In review/Scheduled only if justified.",
+        "Uses CTAs from the allowed list and aligns them to goals (list growth + demo signups): includes at least one each of book a demo, download the ebook, register for the webinar, reply with a question, follow on LinkedIn.",
+        "Shows author as Alex and indicates cover images are included for each issue.",
+        "Provides a backlog list that includes unscheduled ideas from the given backlog, removing any items that were scheduled into the six-week plan."
+      ],
+      "expected_components": [
+        "NewsletterCalendarBoard showing six CalendarIssue entries on Jan 7, Jan 14, Jan 21, Jan 28, Feb 4, and Feb 11, 2025 at 10am ET with author Alex (MUST-HAVE: user explicitly asked for a 6-week calendar view).",
+        "IssueCard for each scheduled issue displaying topic/title, primary CTA, and a StatusChip reflecting the workflow status (MUST-HAVE: user requested topics, CTAs, and draft status per issue).",
+        "BacklogIdea listing remaining unscheduled ideas from the provided backlog (MUST-HAVE: user expects a backlog list for ideas not yet scheduled)."
+      ]
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I organized a 6-week Tuesday 10am ET cadence starting the week of Jan 6, aligning one issue to promote your Jan 28 webinar and prioritizing your two in-progress drafts first. I used statuses that map cleanly to your workflow (Planned/Draft now; you can move to Scheduled/Sent later). Backlog items not yet placed remain visible for pull-forward. Next steps I recommend: advance the first two drafts to \"scheduled\" once approved, confirm the webinar blurb/CTA, and choose which backlog item you\u2019d like slotted next if anything changes post-webinar."
+      },
+      {
+        "type": "component",
+        "component": {
+          "name": "NewsletterCalendarBoard",
+          "props": {
+            "startDate": "2025-01-05",
+            "weekCount": 6,
+            "rangeLabel": "Jan 5 \u2013 Feb 15, 2025",
+            "timezone": "America/New_York",
+            "issues": [
+              {
+                "id": "issue-2025-01-07-utm-ai",
+                "date": "2025-01-07",
+                "topic": "AI for UTM Sanity",
+                "cta": "download the ebook",
+                "status": "draft",
+                "isDraft": true,
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "AI in marketing ops",
+                  "attribution",
+                  "Q1 planning"
+                ]
+              },
+              {
+                "id": "issue-2025-01-14-welcome-flows",
+                "date": "2025-01-14",
+                "topic": "Welcome Flows Teardown",
+                "cta": "book a demo",
+                "status": "draft",
+                "isDraft": true,
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "lifecycle onboarding",
+                  "email",
+                  "PLG metrics"
+                ]
+              },
+              {
+                "id": "issue-2025-01-21-attribution-frameworks",
+                "date": "2025-01-21",
+                "topic": "Attribution Frameworks",
+                "cta": "download the ebook",
+                "status": "planned",
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "attribution",
+                  "Q1 planning"
+                ]
+              },
+              {
+                "id": "issue-2025-01-28-webinar-reminder",
+                "date": "2025-01-28",
+                "topic": "Jan 28 Webinar Reminder",
+                "cta": "register for the Jan 28 webinar",
+                "status": "planned",
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "marketing ops",
+                  "events"
+                ]
+              },
+              {
+                "id": "issue-2025-02-04-deliverability-toolkit",
+                "date": "2025-02-04",
+                "topic": "Deliverability Toolkit",
+                "cta": "reply with a question",
+                "status": "planned",
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "email deliverability",
+                  "inbox placement"
+                ]
+              },
+              {
+                "id": "issue-2025-02-11-churn-case-study",
+                "date": "2025-02-11",
+                "topic": "Churn-Reduction Case Study",
+                "cta": "book a demo",
+                "status": "planned",
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "PLG metrics",
+                  "retention"
+                ]
+              }
+            ],
+            "backlogIdeas": [
+              {
+                "id": "idea-revops-interview",
+                "topic": "Interview with a RevOps Lead",
+                "notes": "Discuss attribution, lifecycle onboarding, and Q1 planning for B2B SaaS."
+              },
+              {
+                "id": "idea-plg-curation",
+                "topic": "Curation: 5 Must-Read PLG Posts",
+                "notes": "Short commentary on each; align to PLG metrics theme."
+              }
+            ],
+            "selectedIssueId": "issue-2025-01-07-utm-ai",
+            "statusLegend": {
+              "idea": "Idea",
+              "planned": "Planned",
+              "draft": "Draft",
+              "scheduled": "Scheduled",
+              "sent": "Sent",
+              "cancelled": "Cancelled"
+            },
+            "statusColors": {
+              "planned": "#8B9BAA",
+              "draft": "#F59E0B",
+              "scheduled": "#3B82F6",
+              "sent": "#10B981",
+              "cancelled": "#EF4444"
+            },
+            "showWeekNumbers": true,
+            "boardTitle": "Newsletter Content Plan",
+            "iconUrl": "https://cdn-icons-png.flaticon.com/512/747/747310.png"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": "Great\u2014please render the 6-week calendar with dates (Jan 7, 14, 21, 28; Feb 4, 11), showing cards per issue with topic, primary CTA, and status chips. Use my two drafts first, make the webinar the primary promo on Jan 21 with a soft mention on Jan 14, and include the backlog list for unscheduled ideas. Author = Alex, with cover images noted.",
+    "grading_guidance": {
+      "quality_criteria": [
+        "Displays exactly the six requested Tuesday dates: Jan 7, Jan 14, Jan 21, Jan 28, Feb 4, Feb 11 (2025) as the calendar issues",
+        "Uses the user's two existing drafts in the earliest open slots (Jan 7 and Jan 14), labeling their status with StatusChip values that reflect 'Draft' or 'In Progress' rather than inventing new statuses",
+        "Makes the webinar the primary promo on Jan 21 (primary CTA = webinar registration) and includes only a soft mention on Jan 14 (secondary/inline note, not the primary CTA)",
+        "Shows each issue as a card with: topic/title, a single primary CTA, and visible StatusChip(s); also includes 'Author: Alex' and a note for cover image per issue",
+        "Includes a backlog list of unscheduled ideas separately from the six issues (clearly marked), without scheduling them into the calendar"
+      ],
+      "expected_components": [
+        "NewsletterCalendarBoard showing six CalendarIssue entries dated Jan 7, Jan 14, Jan 21, Jan 28, Feb 4, and Feb 11 with IssueCard content (MUST-HAVE: user explicitly requested a 6-week calendar render by date)",
+        "IssueCard within each CalendarIssue displaying topic/title, primary CTA, status via StatusChip, and metadata for Author = Alex and cover image notes (MUST-HAVE: user asked for cards per issue with topic, primary CTA, and status chips, plus author and cover image notes)",
+        "BacklogIdea list for unscheduled ideas (MUST-HAVE: user requested a backlog list for ideas not yet scheduled)"
+      ]
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I\u2019ve organized a 6-week Tuesday 10am ET plan starting Jan 7 with your two drafts first, a soft webinar mention the week prior, a primary webinar promo on Jan 21, and a balanced mix across your key themes. You\u2019ll see statuses aligned to your workflow (using Planned/Draft now) and Alex listed as author. Backlog ideas remain unscheduled and ready to pull forward. Recommended next steps: finalize the first two drafts, confirm the webinar blurb for Jan 21 and day-of copy for Jan 28, and decide whether the Feb 4 follow-up should drive demos or the benchmark download."
+      },
+      {
+        "type": "component",
+        "component": {
+          "name": "NewsletterCalendarBoard",
+          "props": {
+            "startDate": "2025-01-06",
+            "weekCount": 6,
+            "rangeLabel": "Jan 6 \u2013 Feb 16, 2025",
+            "timezone": "America/New_York",
+            "issues": [
+              {
+                "id": "issue-2025-01-07",
+                "date": "2025-01-07",
+                "topic": "AI for UTM Sanity: How to automate clean tracking without breaking attribution",
+                "cta": "Book a demo",
+                "status": "draft",
+                "isDraft": true,
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "How-to",
+                  "AI in Marketing Ops",
+                  "Attribution"
+                ]
+              },
+              {
+                "id": "issue-2025-01-14",
+                "date": "2025-01-14",
+                "topic": "Welcome Flows Teardown: Onboarding emails that convert PLG signups",
+                "cta": "Download the ebook",
+                "status": "planned",
+                "isDraft": true,
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "Lifecycle Onboarding",
+                  "How-to",
+                  "Webinar soft mention"
+                ]
+              },
+              {
+                "id": "issue-2025-01-21",
+                "date": "2025-01-21",
+                "topic": "Attribution That Matches PLG: Practical frameworks for 2025",
+                "cta": "Register for the Jan 28 webinar",
+                "status": "planned",
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "Attribution",
+                  "Trend Analysis",
+                  "Webinar primary promo"
+                ]
+              },
+              {
+                "id": "issue-2025-01-28",
+                "date": "2025-01-28",
+                "topic": "Webinar Day: Real-world PLG metrics and activation tactics",
+                "cta": "Register for today\u2019s webinar",
+                "status": "planned",
+                "author": "Alex",
+                "readTimeMinutes": 5,
+                "tags": [
+                  "PLG Metrics",
+                  "Event",
+                  "Reminder"
+                ]
+              },
+              {
+                "id": "issue-2025-02-04",
+                "date": "2025-02-04",
+                "topic": "Email Deliverability in 2025: From warm-up to inbox placement",
+                "cta": "Book a demo",
+                "status": "planned",
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "Email Deliverability",
+                  "Toolkit",
+                  "How-to"
+                ]
+              },
+              {
+                "id": "issue-2025-02-11",
+                "date": "2025-02-11",
+                "topic": "Q1 Planning for B2B SaaS: Benchmarks, compounding wins, and what to drop",
+                "cta": "Download the benchmark report",
+                "status": "planned",
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "Q1 Planning",
+                  "Benchmarking",
+                  "Curation"
+                ]
+              }
+            ],
+            "backlogIdeas": [
+              {
+                "id": "idea-churn-case",
+                "topic": "Case Study: Churn reduction with lifecycle triggers",
+                "notes": "Deep-dive case study; tie to onboarding and activation"
+              },
+              {
+                "id": "idea-deliverability-toolkit",
+                "topic": "Deliverability Toolkit",
+                "notes": "Practical checklist + tools; pair with demo CTA or resource download"
+              },
+              {
+                "id": "idea-attribution-frameworks",
+                "topic": "Attribution Frameworks",
+                "notes": "PLG-friendly models; can be framework guide or cheatsheet"
+              },
+              {
+                "id": "idea-revops-interview",
+                "topic": "Interview: RevOps lead on lifecycle and metrics",
+                "notes": "Interview format; reinforce PLG metrics and activation"
+              },
+              {
+                "id": "idea-plg-curation",
+                "topic": "Curation: 5 must-read PLG posts this month",
+                "notes": "Short commentary with links; supports planning theme"
+              }
+            ],
+            "selectedIssueId": "issue-2025-01-21",
+            "statusLegend": {
+              "idea": "Idea",
+              "planned": "Planned",
+              "draft": "Draft",
+              "scheduled": "Scheduled",
+              "sent": "Sent",
+              "cancelled": "Cancelled"
+            },
+            "statusColors": {
+              "planned": "#6E56CF",
+              "draft": "#E3A008",
+              "scheduled": "#2E90FA",
+              "sent": "#12B981",
+              "cancelled": "#EF4444"
+            },
+            "showWeekNumbers": true,
+            "boardTitle": "Newsletter Content Plan"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": "Please render the actual 6-week calendar for Jan 7, 14, 21, 28; Feb 4, 11 showing each card\u2019s topic, primary CTA, and status chips, with author Alex and cover image noted, plus a separate backlog list. Use my two drafts first, soft webinar mention on Jan 14, primary promo on Jan 21, and include a day-of reminder on Jan 28 with a placeholder for the replay link. Keep statuses to Planned or Draft as appropriate.",
+    "grading_guidance": {
+      "quality_criteria": [
+        "Renders exactly six issues on the specified dates (Jan 7, Jan 14, Jan 21, Jan 28; Feb 4, Feb 11) without adding or omitting dates",
+        "Uses the user's two drafts first: schedules Draft 1 on Jan 7 and Draft 2 on Jan 14, marking them with status 'Draft' and preserving them as the primary topics for those dates",
+        "Implements webinar sequencing precisely: soft webinar mention on Jan 14 (primary CTA is NOT the webinar), primary webinar promo on Jan 21 (primary CTA = register for the webinar), and a day-of reminder on Jan 28 with a placeholder for the replay link in the CTA or notes",
+        "Each issue card explicitly shows: topic, primary CTA, a StatusChip using only 'Planned' or 'Draft', author 'Alex', and a note indicating a cover image",
+        "Includes a separate backlog list of unscheduled ideas/items distinctly from the 6-week calendar"
+      ],
+      "expected_components": [
+        "NewsletterCalendarBoard showing six Tuesday issues dated Jan 7, Jan 14, Jan 21, Jan 28, Feb 4, Feb 11 with columns/weeks as appropriate (MUST-HAVE: user explicitly requested a rendered 6-week calendar view)",
+        "IssueCard for each dated issue showing the topic, primary CTA, StatusChip (Draft or Planned), author Alex, and a cover image note (MUST-HAVE: user asked to show each card\u2019s topic, primary CTA, status chips, with author and cover image noted)",
+        "BacklogIdea list for unscheduled items/ideas separate from the calendar (MUST-HAVE: user requested a separate backlog list)"
+      ]
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Here\u2019s your 6-week Tuesday 10am ET plan starting Jan 7. The two existing drafts lead off, Jan 14 includes a soft webinar mention, Jan 21 is the primary webinar push, and Jan 28 is a day-of reminder with a replay placeholder. Post-webinar, Feb 4 drives demos, and Feb 11 delivers a pragmatic trend piece. Next steps: finalize the two drafts, confirm webinar copy (primary on Jan 21, day-of on Jan 28), and drop in cover images. I kept statuses to Planned or Draft per your workflow and left backlog ideas unscheduled for easy pull-forward."
+      },
+      {
+        "type": "component",
+        "component": {
+          "name": "NewsletterCalendarBoard",
+          "props": {
+            "startDate": "2025-01-06",
+            "weekCount": 6,
+            "rangeLabel": "Jan 6 \u2013 Feb 16, 2025",
+            "timezone": "America/New_York",
+            "issues": [
+              {
+                "id": "issue-2025-01-07",
+                "date": "2025-01-07",
+                "topic": "AI for UTM Sanity",
+                "cta": "Download the ebook",
+                "status": "draft",
+                "isDraft": true,
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "how-to",
+                  "AI in marketing ops",
+                  "attribution",
+                  "cover image planned"
+                ]
+              },
+              {
+                "id": "issue-2025-01-14",
+                "date": "2025-01-14",
+                "topic": "Welcome Flows Teardown",
+                "cta": "Book a demo",
+                "status": "draft",
+                "isDraft": true,
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "how-to",
+                  "lifecycle onboarding",
+                  "soft webinar mention",
+                  "cover image planned"
+                ]
+              },
+              {
+                "id": "issue-2025-01-21",
+                "date": "2025-01-21",
+                "topic": "PLG Metrics That Matter in Q1",
+                "cta": "Register for the Jan 28 webinar",
+                "status": "planned",
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "trend analysis",
+                  "PLG metrics",
+                  "webinar primary promo",
+                  "cover image planned"
+                ]
+              },
+              {
+                "id": "issue-2025-01-28",
+                "date": "2025-01-28",
+                "topic": "Webinar Day: Last\u2011Chance Reminder + Replay Placeholder",
+                "cta": "Register for the Jan 28 webinar",
+                "status": "planned",
+                "author": "Alex",
+                "readTimeMinutes": 5,
+                "tags": [
+                  "webinar",
+                  "day-of reminder",
+                  "replay placeholder",
+                  "cover image planned"
+                ]
+              },
+              {
+                "id": "issue-2025-02-04",
+                "date": "2025-02-04",
+                "topic": "Post\u2011Webinar Takeaways: From Activation to Expansion",
+                "cta": "Book a demo",
+                "status": "planned",
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "trend analysis",
+                  "PLG metrics",
+                  "lifecycle onboarding",
+                  "cover image planned"
+                ]
+              },
+              {
+                "id": "issue-2025-02-11",
+                "date": "2025-02-11",
+                "topic": "Trend Watch: AI in Marketing Ops for Q1 Planning",
+                "cta": "Reply with a question",
+                "status": "planned",
+                "author": "Alex",
+                "readTimeMinutes": 6,
+                "tags": [
+                  "trend analysis",
+                  "AI in marketing ops",
+                  "Q1 planning",
+                  "cover image planned"
+                ]
+              }
+            ],
+            "backlogIdeas": [
+              {
+                "id": "idea-churn-case-study",
+                "topic": "Churn\u2011reduction case study",
+                "notes": "Deep-dive on retention levers and expansion revenue impact in B2B SaaS"
+              },
+              {
+                "id": "idea-deliverability-toolkit",
+                "topic": "Deliverability toolkit",
+                "notes": "Framework + checklist for warming, authentication, reputation monitoring"
+              },
+              {
+                "id": "idea-attribution-frameworks",
+                "topic": "Attribution frameworks",
+                "notes": "Comparing MTA, MMM, and pragmatic hybrid models for PLG motions"
+              },
+              {
+                "id": "idea-revops-interview",
+                "topic": "Interview with a RevOps lead",
+                "notes": "Lifecycle instrumentation, handoffs, and demo pipeline quality"
+              },
+              {
+                "id": "idea-plg-curation",
+                "topic": "Curation: 5 must\u2011read PLG posts",
+                "notes": "Short summaries + why each matters for Q1 planning"
+              }
+            ],
+            "statusLegend": {
+              "planned": "Planned",
+              "draft": "Draft",
+              "scheduled": "Scheduled",
+              "sent": "Sent",
+              "cancelled": "Cancelled",
+              "idea": "Idea",
+              "ready": "Ready"
+            },
+            "statusColors": {
+              "planned": "#4C78FF",
+              "draft": "#F59E0B"
+            },
+            "showWeekNumbers": true,
+            "boardTitle": "Newsletter Content Plan",
+            "iconUrl": "https://cdn.example.com/icons/newsletter-board.png"
+          }
+        }
+      }
+    ]
+  }
+];
+
+    // Component implementations
+    // NewsletterCalendarBoard
+const NewsletterCalendarBoard = (props) => {
+  const {
+    startDate,
+    weekCount = 4,
+    rangeLabel,
+    timezone,
+    issues = [],
+    backlogIdeas = [],
+    selectedIssueId,
+    statusLegend = {},
+    statusColors = {},
+    showWeekNumbers = true,
+    boardTitle = 'Newsletter Calendar',
+    iconUrl
+  } = props || {};
+
+  const safeTz = timezone || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC');
+
+  const parseDate = (value) => {
+    if (!value) return null;
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const dateKeyInTz = (date, tz) => {
+    try {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(date);
+      const y = parts.find(p => p.type === 'year')?.value || '0000';
+      const m = parts.find(p => p.type === 'month')?.value || '01';
+      const d = parts.find(p => p.type === 'day')?.value || '01';
+      return `${y}-${m}-${d}`;
+    } catch (e) {
+      const y = date.getUTCFullYear();
+      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(date.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  };
+
+  const formatShort = (date, tz) => {
+    try {
+      return new Intl.DateTimeFormat('en-US', { timeZone: tz, month: 'short', day: 'numeric' }).format(date);
+    } catch (e) {
+      return date.toDateString();
+    }
+  };
+
+  const formatTime = (date, tz) => {
+    try {
+      return new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit' }).format(date);
+    } catch (e) {
+      return '';
+    }
+  };
+
+  const getISOWeek = (date) => {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() === 0 ? 7 : d.getUTCDay();
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    return weekNo;
+  };
+
+  const start = parseDate(startDate) || new Date();
+
+  const weeks = React.useMemo(() => {
+    const days = [];
+    const first = new Date(start.getTime());
+    for (let i = 0; i < weekCount * 7; i += 1) {
+      const d = new Date(first.getTime());
+      d.setDate(first.getDate() + i);
+      days.push(d);
+    }
+    const chunked = [];
+    for (let w = 0; w < weekCount; w += 1) {
+      chunked.push(days.slice(w * 7, w * 7 + 7));
+    }
+    return chunked;
+  }, [startDate, weekCount]);
+
+  const weekdayNames = React.useMemo(() => {
+    const base = [];
+    for (let i = 0; i < 7; i += 1) {
+      const d = new Date(2021, 0, 3 + i);
+      try {
+        base.push(new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(d));
+      } catch (e) {
+        base.push(['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][i]);
+      }
+    }
+    return base;
+  }, []);
+
+  const issueDateKey = (issue, tz) => {
+    const candidate = parseDate(issue?.date) || parseDate(issue?.scheduledDate) || parseDate(issue?.publishDate);
+    return candidate ? dateKeyInTz(candidate, tz) : null;
+  };
+
+  const issuesByDay = React.useMemo(() => {
+    const map = {};
+    if (Array.isArray(issues)) {
+      issues.forEach((it) => {
+        const key = issueDateKey(it, safeTz);
+        if (!key) return;
+        if (!map[key]) map[key] = [];
+        map[key].push(it);
+      });
+    }
+    return map;
+  }, [issues, safeTz]);
+
+  const getStatusLabel = (status) => {
+    if (!status) return '';
+    const label = statusLegend[status];
+    return typeof label === 'string' && label.length > 0 ? label : String(status);
+  };
+
+  const getStatusClasses = (status) => {
+    const fallback = {
+      planned: { bg: 'bg-blue-100', text: 'text-blue-700' },
+      drafting: { bg: 'bg-yellow-100', text: 'text-yellow-800' },
+      ready: { bg: 'bg-green-100', text: 'text-green-700' },
+      sent: { bg: 'bg-green-100', text: 'text-green-700' },
+      blocked: { bg: 'bg-red-100', text: 'text-red-700' },
+      default: { bg: 'bg-gray-100', text: 'text-gray-700' }
+    };
+    const s = String(status || '').toLowerCase();
+    const custom = statusColors[status];
+    if (custom && typeof custom === 'object') {
+      const bg = typeof custom.bg === 'string' ? custom.bg : '';
+      const text = typeof custom.text === 'string' ? custom.text : '';
+      return `${bg || fallback[s]?.bg || fallback.default.bg} ${text || fallback[s]?.text || fallback.default.text}`;
+    }
+    if (typeof custom === 'string') {
+      return custom;
+    }
+    const f = fallback[s] || fallback.default;
+    return `${f.bg} ${f.text}`;
+  };
+
+  const renderIssue = (issue, idx) => {
+    const id = issue?.id || issue?._id || `i-${idx}`;
+    const title = issue?.title || issue?.name || 'Untitled Issue';
+    const status = issue?.status || issue?.state || '';
+    const time = parseDate(issue?.date) || parseDate(issue?.scheduledDate) || parseDate(issue?.publishDate);
+    const borderClass = (selectedIssueId && (String(selectedIssueId) === String(issue?.id) || String(selectedIssueId) === String(issue?._id)))
+      ? 'border-blue-400'
+      : 'border-gray-200';
+    return (
+      <div key={id} className={`p-2 bg-white rounded-md border ${borderClass} shadow-sm hover:shadow-md transition-shadow`}>
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium text-gray-900 truncate">{title}</div>
+            {issue?.description && (
+              <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{issue.description}</div>
+            )}
+          </div>
+          {status ? (
+            <span className={`ml-2 px-2 py-0.5 text-xs font-medium rounded ${getStatusClasses(status)}`}>
+              {getStatusLabel(status)}
+            </span>
+          ) : null}
+        </div>
+        {(time || issue?.author || issue?.topic) ? (
+          <div className="mt-1 text-xs text-gray-500 flex flex-wrap gap-x-3 gap-y-1">
+            {time ? <span>{formatTime(time, safeTz)}</span> : null}
+            {issue?.author ? <span>By {issue.author}</span> : null}
+            {issue?.topic ? <span>Topic: {issue.topic}</span> : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  return (
+    <div className="w-full max-w-3xl mx-auto bg-white rounded-lg shadow-lg p-6 border border-gray-200">
+      <div className="flex items-center gap-3 mb-4">
+        <img
+          src={iconUrl || 'https://via.placeholder.com/64x64'}
+          alt={boardTitle || 'Newsletter Calendar'}
+          className="w-10 h-10 rounded-md object-cover"
+          loading="lazy"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="text-lg font-semibold text-gray-900 truncate">{boardTitle || 'Newsletter Calendar'}</div>
+          <div className="text-sm text-gray-600">
+            {rangeLabel || 'Scheduled range'} • {safeTz}
+          </div>
+        </div>
+      </div>
+
+      {Object.keys(statusLegend || {}).length > 0 ? (
+        <div className="mb-4">
+          <div className="text-sm font-medium text-gray-700 mb-2">Status</div>
+          <div className="flex flex-wrap gap-2">
+            {Object.keys(statusLegend).map((key) => (
+              <span key={key} className={`px-2 py-0.5 text-xs font-medium rounded ${getStatusClasses(key)}`}>
+                {statusLegend[key]}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="overflow-x-auto">
+        <div className="min-w-[640px]">
+          <div className="grid grid-cols-7 gap-2 mb-2">
+            {weekdayNames.map((name, idx) => (
+              <div key={idx} className="text-xs font-medium text-gray-600 uppercase tracking-wide">{name}</div>
+            ))}
+          </div>
+
+          <div className="space-y-3">
+            {weeks.map((week, wIdx) => (
+              <div key={wIdx} className="border border-gray-200 rounded-lg">
+                <div className="grid grid-cols-7 gap-0.5 p-1">
+                  {week.map((day, dIdx) => {
+                    const key = dateKeyInTz(day, safeTz);
+                    const dayIssues = issuesByDay[key] || [];
+                    return (
+                      <div key={dIdx} className="bg-gray-50 rounded-md p-2 flex flex-col min-h-[120px]">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-medium text-gray-700">{formatShort(day, safeTz)}</span>
+                          <span className="text-[10px] text-gray-500">{dayIssues.length > 0 ? `${dayIssues.length}` : ''}</span>
+                        </div>
+                        <div className="space-y-2">
+                          {dayIssues.length > 0 ? dayIssues.map((it, idx) => renderIssue(it, idx)) : (
+                            <div className="text-xs text-gray-400 italic">No issues</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {showWeekNumbers ? (
+                  <div className="px-3 py-2 border-t border-gray-200 bg-white rounded-b-lg text-xs text-gray-500">
+                    Week {getISOWeek(week[0])}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold text-gray-900">Backlog Ideas</h3>
+          <span className="text-sm text-gray-500">{Array.isArray(backlogIdeas) ? backlogIdeas.length : 0} items</span>
+        </div>
+        {Array.isArray(backlogIdeas) && backlogIdeas.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {backlogIdeas.map((idea, idx) => {
+              const title = idea?.title || idea?.name || `Idea ${idx + 1}`;
+              const desc = idea?.description || idea?.summary || '';
+              const status = idea?.status || '';
+              const topic = idea?.topic || idea?.category || '';
+              return (
+                <div key={idea?.id || idea?._id || `b-${idx}`} className="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="text-sm font-medium text-gray-900 line-clamp-1">{title}</div>
+                    {status ? (
+                      <span className={`ml-2 px-2 py-0.5 text-[10px] font-medium rounded ${getStatusClasses(status)}`}>
+                        {getStatusLabel(status)}
+                      </span>
+                    ) : null}
+                  </div>
+                  {desc ? <div className="text-xs text-gray-600 line-clamp-2">{desc}</div> : <div className="text-xs text-gray-400 italic">No description</div>}
+                  {(topic || idea?.priority) ? (
+                    <div className="text-xs text-gray-500 mt-2">
+                      {topic ? <span>Topic: {topic}</span> : null}
+                      {idea?.priority ? <span className="ml-2">Priority: {String(idea.priority)}</span> : null}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-center">
+            <div className="text-sm text-gray-600">No backlog ideas to display</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+    // Component registry
+    const ComponentRegistry = {
+      NewsletterCalendarBoard: NewsletterCalendarBoard
+    };
+
+    // Component renderer
+    const ComponentRenderer = ({ componentName, props }) => {
+      const Component = ComponentRegistry[componentName];
+
+      if (!Component) {
+        return (
+          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-sm text-yellow-800">Component "{componentName}" not found</p>
+          </div>
+        );
+      }
+
+      return <Component {...props} />;
+    };
+
+    // Content chunk renderer
+    const ContentChunkRenderer = ({ chunk }) => {
+      if (chunk.type === 'text') {
+        return <div className="text-gray-800 whitespace-pre-wrap">{chunk.text}</div>;
+      } else if (chunk.type === 'component') {
+        const { name, props } = chunk.component;
+        return (
+          <div className="my-4">
+            <ComponentRenderer componentName={name} props={props} />
+          </div>
+        );
+      }
+      return null;
+    };
+
+    // Message bubble
+    const MessageBubble = ({ message }) => {
+      const role = message.role;
+      const content = message.content;
+
+      if (role === 'user') {
+        return (
+          <div className="flex justify-end mb-4">
+            <div className="bg-blue-500 text-white rounded-2xl rounded-tr-sm px-4 py-2 max-w-2xl">
+              {content}
+            </div>
+          </div>
+        );
+      } else if (role === 'assistant') {
+        return (
+          <div className="flex justify-start mb-4">
+            <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 max-w-4xl shadow-sm">
+              {Array.isArray(content) ? (
+                <div className="space-y-3">
+                  {content.map((chunk, idx) => (
+                    <ContentChunkRenderer key={idx} chunk={chunk} />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-gray-800">{content}</div>
+              )}
+            </div>
+          </div>
+        );
+      } else if (role === 'tool') {
+        return (
+          <div className="flex justify-center mb-4">
+            <div className="bg-gray-100 text-gray-700 rounded-lg px-3 py-2 text-sm max-w-2xl">
+              <div className="font-medium text-gray-500 text-xs mb-1">Tool Response</div>
+              <div className="font-mono text-xs">{content}</div>
+            </div>
+          </div>
+        );
+      }
+
+      return null;
+    };
+
+    // Conversation view
+    const ConversationView = ({ conversation }) => {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
+          <div className="max-w-5xl mx-auto px-4">
+            <div className="bg-white rounded-3xl shadow-xl p-8">
+              <h1 className="text-2xl font-bold text-gray-900 mb-6">Plan my next 6 weeks of newsletter issues with topics, CTAs, and draft status.</h1>
+              <div className="space-y-2">
+                {conversation.map((msg, idx) => (
+                  <MessageBubble key={idx} message={msg} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // Render to DOM
+    const rootEl = document.getElementById("root");
+    if (rootEl) {
+      const root = createRoot(rootEl);
+      root.render(<ConversationView conversation={conversationData} />);
+    }
+  </script>
+</body>
+</html>

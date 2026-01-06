@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>I have multiple freelance clients—help me track invoices, due dates, and payments.</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { margin: 0; padding: 0; background: #f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    #root { min-height: 100vh; }
+    * { box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
+    const { createRoot } = ReactDOM;
+
+    // Conversation data
+    const conversationData = [
+  {
+    "role": "user",
+    "content": "I have multiple freelance clients\u2014help me track invoices, due dates, and payments.",
+    "grading_guidance": {
+      "quality_criteria": [
+        "Asks 4-6 targeted questions to clarify: list of clients, what invoice fields to track (invoice #, issue date, due date, amount, currency, taxes/fees, status, payment method), desired date range (e.g., last 3\u20136 months vs all-time), and whether multi-currency is involved",
+        "Elicits preferred views explicitly mentioned in the scenario (client cards with outstanding balances, invoice status table, cash-flow timeline, filters for paid vs unpaid) and asks which to prioritize first",
+        "Clarifies current data source and format (existing spreadsheet/app vs starting from scratch, availability of CSV import) and whether reminders/alerts for upcoming due dates are needed",
+        "Avoids presenting any mock data or visual components before requirements are gathered; does not assume client names, currencies, or statuses",
+        "Explains briefly what information is needed to generate the ClientSummaryCard, InvoiceRow/InvoiceOverviewDashboard, and CashflowPoint views once the user provides details"
+      ],
+      "expected_components": []
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Great\u2014let\u2019s set up a clear view of your freelance invoices, due dates, and payments. To build your dashboard and summaries, could you share the details below (answer as many as you can now):\n\n1) Data sources\n- Where do your invoices live today? (e.g., QuickBooks, Wave, FreshBooks, PayPal, Stripe, Google Sheets/Excel, Notion)\n- Do you track client payments anywhere else (bank exports, CSV)?\n- Would you prefer to paste data here (CSV/table) or connect to a platform?\n\n2) Clients and scope\n- Which clients should be included initially? (names + optional IDs)\n- Any clients to exclude or marked inactive/paused?\n- Primary currency for rollups (e.g., USD), and any multi-currency invoices?\n\n3) Timeframe and filters\n- What date range do you want to review first? (e.g., \u201clast 90 days\u201d, specific dates)\n- Status focus: all, unpaid, overdue, or paid?\n- Do you use tags/labels (e.g., retainer, design, rush) you want displayed?\n\n4) Invoices and payments fields\n- For each invoice: invoice number, issue date, due date, amount, currency, status, client, tags, paid date (if paid). Do you have partial payments to track?\n- Any external references (PO numbers) you want shown?\n\n5) Cash flow timeline\n- Include only receivables (invoice inflows), or also expenses/outflows? If expenses, how will you provide them?\n\n6) Reminders and priorities\n- Do you want overdue items visually emphasized?\n- Any follow-up rules (e.g., flag invoices overdue >15 days)?\n\n7) Display preferences\n- Show client logos/avatars if available?\n- Currency display: symbol ($) or code (USD)?\n- Anything else you want highlighted in client cards or the invoice table?\n\nIf you already have a spreadsheet, you can paste a few sample rows (headers + 5\u201310 rows), and I\u2019ll structure the dashboard from that. Once I have these details, I\u2019ll generate your client cards, invoice status table, and a cash-flow timeline with a clear metrics summary."
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": "Everything is in a Google Sheet; clients: Acme Co, BrightLabs, Cedar Media; USD; review last 90 days; focus on unpaid/overdue; tags: retainer, rush; track partial payments; receivables only for now; highlight overdue and flag >15 days; show logos if available; use $ symbol. I can paste a few sample rows next if that works.",
+    "grading_guidance": {
+      "quality_criteria": [
+        "Explicitly acknowledges and restates the user's parameters: Google Sheet source, three clients (Acme Co, BrightLabs, Cedar Media), currency USD with $ symbol, last 90 days scope, focus on unpaid/overdue receivables only, tags (retainer, rush), need to track partial payments, highlight overdue and flag >15 days, and show logos if available.",
+        "Requests sample rows and specifies the exact columns needed from the Google Sheet to implement the view (e.g., Client, Invoice ID, Issue Date, Due Date, Amount, Currency, Amount Paid or Payments log, Balance Due, Status, Tags, Logo URL), including how partial payments should be represented (single Amount Paid vs. separate Payments sheet).",
+        "Provides clear calculation rules the sheet should support: how to determine 'Unpaid' vs 'Overdue', the last-90-days filter (based on issue date or due date and asks to confirm), Days Past Due formula, Overdue >15 days flag, and Balance Due = Amount - sum(Partial Payments).",
+        "Explains sheet-level implementation details aligned with the user's preferences: applying currency formatting with $ (USD), conditional formatting to highlight overdue invoices and to flag those >15 days, and how to pull/display logos if a Logo URL is present.",
+        "Does not attempt to render dashboard components yet; instead, offers to generate formulas/filters and a template layout after receiving the sample rows, and asks any minimal clarifying question needed (e.g., confirm which date field defines the last 90 days filter)."
+      ],
+      "expected_components": []
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Perfect\u2014thanks for the scope. Since everything\u2019s in Google Sheets and you want last 90 days focused on unpaid/overdue, partial payments, receivables only, overdue highlighting, and $ symbol, the next step is to paste a few sample rows so I can generate your dashboard. Please paste 5\u201310 rows including the header, using this schema:\n\nRequired columns:\n- invoice_id (or invoice_number)\n- client_name (Acme Co, BrightLabs, Cedar Media)\n- issue_date (YYYY-MM-DD)\n- due_date (YYYY-MM-DD)\n- amount (numeric)\n- currency (use USD)\n- status (paid | unpaid | overdue | partial)\n- paid_date (if paid or partial; leave blank otherwise)\n- tags (comma-separated, e.g., retainer, rush)\n\nOptional but helpful:\n- reference (PO or external ref)\n- payments (for partials: semicolon-separated entries like 2025-01-05|200;2025-01-20|150)\n\nExample header line to copy:\ninvoice_id,client_name,issue_date,due_date,amount,currency,status,paid_date,tags,reference,payments\n\nIf you have client logo URLs, share them too (one URL per client). Once you paste the sample, I\u2019ll produce: 1) client cards with outstanding balances, 2) an invoice status table filtered to unpaid/overdue for the last 90 days, 3) a cash-flow timeline (receivables only), and 4) a metrics summary with overdue emphasis and a >15 days overdue flag."
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": "Here are 7 sample rows from my Google Sheet, plus logo URLs.\n\ninvoice_id,client_name,issue_date,due_date,amount,currency,status,paid_date,tags,reference,payments\nINV-101,Acme Co,2025-10-01,2025-10-31,1500,USD,overdue,,retainer,PO-7742,\nINV-102,BrightLabs,2025-11-05,2025-12-05,2400,USD,partial,2025-12-10,rush,PO-8820,2025-11-20|800;2025-12-10|400\nINV-103,Cedar Media,2025-12-01,2025-12-30,1800,USD,unpaid,,retainer,PO-9011,\nINV-104,Acme Co,2025-09-25,2025-10-10,900,USD,paid,2025-10-12,retainer,PO-7701,\nINV-105,BrightLabs,2025-09-22,2025-10-22,1200,USD,overdue,,rush,PO-8755,\nINV-106,Cedar Media,2025-11-18,2025-11-28,600,USD,paid,2025-11-27,retainer,PO-8990,\nINV-107,Acme Co,2025-12-10,2026-01-09,2000,USD,unpaid,,retainer,PO-7810,\n\nLogos:\n- Acme Co: https://example.com/logos/acme.png\n- BrightLabs: https://example.com/logos/brightlabs.png\n- Cedar Media: https://example.com/logos/cedar.png",
+    "grading_guidance": {
+      "quality_criteria": [
+        "Parses the provided CSV rows accurately, including splitting the 'payments' field into date|amount pairs (e.g., '2025-11-20|800;2025-12-10|400') and summing partial payments to compute outstanding amounts per invoice and per client.",
+        "Computes overdue status based on due_date relative to today (2025-12-19), marking invoices as overdue only if due_date has passed and the invoice is not fully paid; correctly identifies INV-101 and INV-105 as fully overdue and the unpaid portion of INV-102 as overdue.",
+        "Shows client-level outstanding totals and uses the given logo URLs mapped to the exact client names (Acme Co, BrightLabs, Cedar Media): Acme Co $3,500 outstanding (of which $1,500 overdue), BrightLabs $2,400 outstanding (all overdue), Cedar Media $1,800 outstanding (not overdue).",
+        "Applies the user\u2019s 'last 90 days' focus using due_date as the filter window (2025-09-20 to 2025-12-19) while still highlighting overdue/unpaid invoices; excludes non-receivables and keeps currency display in USD with $ symbol.",
+        "Builds a payment cash-flow from actual payment events within the last 90 days (e.g., 2025-10-12, 2025-11-20, 2025-11-27, 2025-12-10) rather than from invoice issue amounts, ensuring amounts and dates match the sample data."
+      ],
+      "expected_components": [
+        "ClientSummaryCard for each of Acme Co, BrightLabs, and Cedar Media showing logo, total outstanding, and overdue portion (MUST-HAVE: user requested client cards with outstanding balances; logo URLs were provided).",
+        "InvoiceOverviewDashboard showing last-90-days invoices filtered to unpaid/overdue with a status table sorted by due_date, including partial payment remaining balances (MUST-HAVE: user asked to track invoices, due dates, statuses, and partials with a focus on unpaid/overdue).",
+        "CashflowPoint displaying payment events and amounts over the last 90 days to visualize cash inflows (NICE-TO-HAVE: supports the requested cash-flow timeline from actual payment dates)."
+      ]
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I\u2019ve organized your last 90 days of invoices across Acme Co, BrightLabs, and Cedar Media, focused on unpaid/overdue items with partials tracked. You currently have $7,700 outstanding across 5 open invoices, with two invoices more than 15 days overdue highlighted for priority follow-up. One partial invoice from BrightLabs has a $1,200 remaining balance and is 14 days past due. No invoices are due in the next 7 days, and you received $400 in payments this month. If you\u2019d like, I can add automated reminder text for those overdue by 15+ days."
+      },
+      {
+        "type": "component",
+        "component": {
+          "name": "InvoiceOverviewDashboard",
+          "props": {
+            "title": "Invoice Overview",
+            "generatedAt": "2025-12-19T12:00:00Z",
+            "clientsSummary": [
+              {
+                "clientId": "Acme Co",
+                "clientName": "Acme Co",
+                "logoUrl": "https://example.com/logos/acme.png",
+                "outstandingBalance": 3500,
+                "currency": "USD",
+                "lastInvoiceDate": "2025-12-10",
+                "status": "active",
+                "openInvoicesCount": 2
+              },
+              {
+                "clientId": "BrightLabs",
+                "clientName": "BrightLabs",
+                "logoUrl": "https://example.com/logos/brightlabs.png",
+                "outstandingBalance": 2400,
+                "currency": "USD",
+                "lastInvoiceDate": "2025-11-05",
+                "status": "active",
+                "openInvoicesCount": 2
+              },
+              {
+                "clientId": "Cedar Media",
+                "clientName": "Cedar Media",
+                "logoUrl": "https://example.com/logos/cedar.png",
+                "outstandingBalance": 1800,
+                "currency": "USD",
+                "lastInvoiceDate": "2025-12-01",
+                "status": "active",
+                "openInvoicesCount": 1
+              }
+            ],
+            "invoices": [
+              {
+                "invoiceId": "INV-101",
+                "invoiceNumber": "INV-101",
+                "clientId": "Acme Co",
+                "clientName": "Acme Co",
+                "issueDate": "2025-10-01",
+                "dueDate": "2025-10-31",
+                "amount": 1500,
+                "currency": "USD",
+                "status": "overdue",
+                "tags": [
+                  "retainer"
+                ]
+              },
+              {
+                "invoiceId": "INV-102",
+                "invoiceNumber": "INV-102",
+                "clientId": "BrightLabs",
+                "clientName": "BrightLabs",
+                "issueDate": "2025-11-05",
+                "dueDate": "2025-12-05",
+                "amount": 2400,
+                "currency": "USD",
+                "status": "partial",
+                "paidDate": "2025-12-10",
+                "tags": [
+                  "rush"
+                ]
+              },
+              {
+                "invoiceId": "INV-103",
+                "invoiceNumber": "INV-103",
+                "clientId": "Cedar Media",
+                "clientName": "Cedar Media",
+                "issueDate": "2025-12-01",
+                "dueDate": "2025-12-30",
+                "amount": 1800,
+                "currency": "USD",
+                "status": "unpaid",
+                "tags": [
+                  "retainer"
+                ]
+              },
+              {
+                "invoiceId": "INV-105",
+                "invoiceNumber": "INV-105",
+                "clientId": "BrightLabs",
+                "clientName": "BrightLabs",
+                "issueDate": "2025-09-22",
+                "dueDate": "2025-10-22",
+                "amount": 1200,
+                "currency": "USD",
+                "status": "overdue",
+                "tags": [
+                  "rush"
+                ]
+              },
+              {
+                "invoiceId": "INV-107",
+                "invoiceNumber": "INV-107",
+                "clientId": "Acme Co",
+                "clientName": "Acme Co",
+                "issueDate": "2025-12-10",
+                "dueDate": "2026-01-09",
+                "amount": 2000,
+                "currency": "USD",
+                "status": "unpaid",
+                "tags": [
+                  "retainer"
+                ]
+              }
+            ],
+            "cashflowPoints": [
+              {
+                "date": "2025-10-22",
+                "amount": 1200,
+                "type": "inflow",
+                "label": "INV-105 due"
+              },
+              {
+                "date": "2025-10-31",
+                "amount": 1500,
+                "type": "inflow",
+                "label": "INV-101 due"
+              },
+              {
+                "date": "2025-11-20",
+                "amount": 800,
+                "type": "inflow",
+                "label": "Payment INV-102"
+              },
+              {
+                "date": "2025-12-05",
+                "amount": 1200,
+                "type": "inflow",
+                "label": "INV-102 balance due"
+              },
+              {
+                "date": "2025-12-10",
+                "amount": 400,
+                "type": "inflow",
+                "label": "Payment INV-102"
+              },
+              {
+                "date": "2025-12-30",
+                "amount": 1800,
+                "type": "inflow",
+                "label": "INV-103 due"
+              },
+              {
+                "date": "2026-01-09",
+                "amount": 2000,
+                "type": "inflow",
+                "label": "INV-107 due"
+              }
+            ],
+            "metrics": {
+              "totalOutstanding": 7700,
+              "totalOverdue": 2700,
+              "totalPaidThisMonth": 400,
+              "upcomingDueWithin7Days": 0,
+              "overdueCount": 2,
+              "clientCount": 3,
+              "primaryCurrency": "USD"
+            },
+            "filterSummary": {
+              "statusScope": "unpaid",
+              "clientIdsShown": [
+                "Acme Co",
+                "BrightLabs",
+                "Cedar Media"
+              ],
+              "dateRange": {
+                "from": "2025-09-20",
+                "to": "2025-12-19"
+              },
+              "description": "Unpaid and overdue invoices (last 90 days) for Acme Co, BrightLabs, Cedar Media"
+            },
+            "displayOptions": {
+              "showClientLogos": true,
+              "showInvoicesTableHeader": true,
+              "showCashflowGrid": true,
+              "showLegend": false,
+              "currencyDisplay": "symbol",
+              "emphasizeOverdue": true
+            },
+            "notes": [
+              "Two invoices are >15 days overdue and flagged for follow-up.",
+              "Partial payment received in Dec: $400 from BrightLabs; $1,200 still due.",
+              "Receivables-only timeline: payments received and amounts due are shown as inflows."
+            ]
+          }
+        }
+      },
+      {
+        "type": "component",
+        "component": {
+          "name": "InvoiceFilters",
+          "props": {
+            "title": "Applied Filters",
+            "subtitle": "Last 90 days \u00b7 Unpaid & overdue focus",
+            "appliedStatus": "unpaid",
+            "appliedClients": [
+              {
+                "id": "Acme Co",
+                "name": "Acme Co",
+                "avatarUrl": "https://example.com/logos/acme.png"
+              },
+              {
+                "id": "BrightLabs",
+                "name": "BrightLabs",
+                "avatarUrl": "https://example.com/logos/brightlabs.png"
+              },
+              {
+                "id": "Cedar Media",
+                "name": "Cedar Media",
+                "avatarUrl": "https://example.com/logos/cedar.png"
+              }
+            ],
+            "appliedDateRange": {
+              "from": "2025-09-20",
+              "to": "2025-12-19"
+            },
+            "summary": {
+              "totalInvoices": 5,
+              "totalAmount": 7700,
+              "paidCount": 0,
+              "unpaidCount": 2,
+              "overdueCount": 2,
+              "overdueAmount": 2700
+            },
+            "legend": [
+              {
+                "key": "unpaid",
+                "label": "Unpaid",
+                "colorHex": "#F59E0B"
+              },
+              {
+                "key": "overdue",
+                "label": "Overdue",
+                "colorHex": "#EF4444"
+              },
+              {
+                "key": "paid",
+                "label": "Paid",
+                "colorHex": "#10B981"
+              },
+              {
+                "key": "all",
+                "label": "All",
+                "colorHex": "#6B7280"
+              }
+            ],
+            "showLegend": true,
+            "generatedAt": "2025-12-19T12:00:00Z",
+            "notes": "Amounts reflect outstanding balances in USD. Partial invoices are included under the unpaid scope by remaining balance."
+          }
+        }
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": "Great\u2014please draft friendly overdue reminder emails for:\n- Acme Co (INV-101)\n- BrightLabs (INV-105 and INV-102, noting $1,200 remaining)\n\nInclude amount due, due date, days overdue, and a [Payment Link] placeholder. Also share a concise invoice table (unpaid/overdue only) with remaining balances that I can paste back into Sheets.",
+    "grading_guidance": {
+      "quality_criteria": [
+        "Produces exactly two friendly overdue reminder emails: one addressed to Acme Co referencing INV-101, and one addressed to BrightLabs referencing both INV-105 and INV-102 together (noting a combined $1,200 remaining for BrightLabs).",
+        "Each email explicitly includes: per-invoice amount due (or remaining), due date, days overdue, and a [Payment Link] placeholder; the BrightLabs email should list both invoices with their details and mention the $1,200 total remaining.",
+        "Does not invent missing financials; if amounts/due dates for INV-105 and INV-102 are not available from the provided sheet, uses clear placeholders like [Amount Remaining], [Due Date], [Days Overdue] and briefly asks to confirm whether the $1,200 is the combined remaining for INV-105 + INV-102 and what the split per invoice is.",
+        "Accurately calculates days overdue from each due_date to today's date (2025-12-19) when due_date is known (e.g., INV-101 due 2025-10-31 \u2192 49 days overdue); otherwise leaves [Days Overdue] placeholder and indicates it will be computed from the sheet.",
+        "Provides a paste-ready CSV table containing only the three specified unpaid/overdue invoices (INV-101, INV-105, INV-102) with columns such as: invoice_id,client_name,due_date,amount_remaining,days_overdue,payment_link; no extra commentary lines or heavy formatting."
+      ],
+      "expected_components": []
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Here are friendly overdue reminders for the specified invoices, followed by a concise CSV you can paste into Google Sheets.\n\n\u2014 Email 1: Acme Co (INV-101)\nSubject: Friendly reminder: INV-101 ($1,500) \u2014 now 49 days past due\n\nHi Acme Co team,\n\nHope you\u2019re well! I\u2019m checking in on invoice INV-101 for $1,500, which was due on 2025-10-31 and is currently 49 days overdue. When you have a moment, could you let me know the status or if you need anything from me to finalize payment?\n\nYou can pay here: [Payment Link]\n\nThanks so much for your help,\n[Your Name]\n\n\u2014 Email 2: BrightLabs (INV-105)\nSubject: Quick nudge: INV-105 ($1,200) \u2014 58 days past due\n\nHi BrightLabs team,\n\nJust a quick reminder about invoice INV-105 for $1,200, due on 2025-10-22 and now 58 days overdue. Please let me know if there are any questions or if you need the invoice resent.\n\nYou can pay here: [Payment Link]\n\nAppreciate it,\n[Your Name]\n\n\u2014 Email 3: BrightLabs (INV-102 \u2014 partial, $1,200 remaining)\nSubject: Partial payment noted \u2014 INV-102 ($1,200 remaining), 14 days past due\n\nHi BrightLabs team,\n\nThank you for the partial payments on invoice INV-102. The remaining balance is $1,200. The invoice was due on 2025-12-05 and is currently 14 days overdue. Whenever convenient, please use the link below to settle the remaining amount.\n\nPay remaining balance: [Payment Link]\n\nThanks again,\n[Your Name]\n\nCSV (copy to Sheets):\ninvoice_id,client_name,issue_date,due_date,status,amount,currency,paid_to_date,remaining_balance,days_overdue,tags\nINV-101,Acme Co,2025-10-01,2025-10-31,overdue,1500,USD,0,1500,49,retainer\nINV-102,BrightLabs,2025-11-05,2025-12-05,partial,2400,USD,1200,1200,14,rush\nINV-103,Cedar Media,2025-12-01,2025-12-30,unpaid,1800,USD,0,1800,0,retainer\nINV-105,BrightLabs,2025-09-22,2025-10-22,overdue,1200,USD,0,1200,58,rush\nINV-107,Acme Co,2025-12-10,2026-01-09,unpaid,2000,USD,0,2000,0,retainer\n\nIf you\u2019d like, I can also provide short \u201cpast due\u201d subject line variants, or add your payment portal URL in place of the placeholder so these are ready to send."
+      }
+    ]
+  }
+];
+
+    // Component implementations
+    // InvoiceOverviewDashboard
+const InvoiceOverviewDashboard = (props) => {
+  const {
+    title = 'Invoice Overview',
+    generatedAt,
+    clientsSummary = [],
+    invoices = [],
+    cashflowPoints = [],
+    metrics = {},
+    filterSummary = {},
+    displayOptions = {},
+    notes = []
+  } = props;
+
+  const currencySymbol = displayOptions.currencySymbol || metrics.currencySymbol || (displayOptions.currency || metrics.currency || '$');
+
+  const formatCurrency = (value) => {
+    const n = Number(value);
+    if (isNaN(n)) {
+      return value || `${currencySymbol}0.00`;
+    }
+    try {
+      if (displayOptions.locale && (displayOptions.currency || metrics.currencyCode)) {
+        return new Intl.NumberFormat(displayOptions.locale, {
+          style: 'currency',
+          currency: displayOptions.currency || metrics.currencyCode || 'USD'
+        }).format(n);
+      }
+    } catch (e) {}
+    return `${currencySymbol}${n.toFixed(2)}`;
+  };
+
+  const formatDate = (value) => {
+    if (!value) {
+      return '-';
+    }
+    const d = new Date(value);
+    if (isNaN(d.getTime())) {
+      return String(value);
+    }
+    return d.toLocaleDateString();
+  };
+
+  const computed = (() => {
+    let totalAmount = 0;
+    let paidAmount = 0;
+    let overdueAmount = 0;
+    let outstandingAmount = 0;
+    const now = new Date();
+
+    if (Array.isArray(invoices)) {
+      invoices.forEach((inv) => {
+        const amt = Number(inv.amount || inv.total || inv.value || 0);
+        const status = (inv.status || '').toString().toLowerCase();
+        totalAmount += isNaN(amt) ? 0 : amt;
+
+        const isPaid = status.includes('paid') || status === 'closed' || status === 'completed';
+        const isPartial = status.includes('partial');
+        const dueDate = inv.dueDate ? new Date(inv.dueDate) : null;
+        const paidVal = Number(inv.paid || inv.amountPaid || (isPaid ? amt : 0));
+        const safePaid = isNaN(paidVal) ? 0 : paidVal;
+
+        if (isPaid) {
+          paidAmount += safePaid || amt;
+        } else if (isPartial) {
+          paidAmount += safePaid;
+          outstandingAmount += Math.max(0, amt - safePaid);
+          if (dueDate && !isNaN(dueDate.getTime()) && dueDate < now) {
+            overdueAmount += Math.max(0, amt - safePaid);
+          }
+        } else {
+          outstandingAmount += amt;
+          if (dueDate && !isNaN(dueDate.getTime()) && dueDate < now) {
+            overdueAmount += amt;
+          }
+        }
+      });
+    }
+
+    const invoiceCount = Array.isArray(invoices) ? invoices.length : 0;
+    const clientCount = Array.isArray(clientsSummary) ? clientsSummary.length : 0;
+
+    return {
+      totalAmount,
+      paidAmount,
+      outstandingAmount,
+      overdueAmount,
+      invoiceCount,
+      clientCount
+    };
+  })();
+
+  const cashflow = (() => {
+    if (!Array.isArray(cashflowPoints) || cashflowPoints.length === 0) {
+      return { points: [], min: 0, max: 0 };
+    }
+    const points = cashflowPoints
+      .map((p) => {
+        const amount = Number(p.amount || p.value || 0);
+        const date = p.date || p.period || p.label || '';
+        return { amount: isNaN(amount) ? 0 : amount, date };
+      });
+    const amounts = points.map((p) => p.amount);
+    const min = Math.min.apply(null, amounts);
+    const max = Math.max.apply(null, amounts);
+    return { points, min, max };
+  })();
+
+  const renderSparkline = () => {
+    const width = 320;
+    const height = 64;
+    const padding = 6;
+    const pts = cashflow.points;
+    if (!pts || pts.length === 0) {
+      return (
+        <div className="w-full h-16 flex items-center justify-center text-xs text-gray-500 bg-gray-50 rounded-md">
+          No cashflow data
+        </div>
+      );
+    }
+    const min = cashflow.min;
+    const max = cashflow.max;
+    const range = max - min === 0 ? 1 : max - min;
+    const step = pts.length > 1 ? (width - padding * 2) / (pts.length - 1) : 0;
+
+    const toY = (val) => {
+      const norm = (val - min) / range;
+      return height - padding - norm * (height - padding * 2);
+    };
+
+    const d = pts.map((p, i) => {
+      const x = padding + i * step;
+      const y = toY(p.amount);
+      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+    }).join(' ');
+
+    const last = pts[pts.length - 1] || { amount: 0 };
+    const change = pts.length > 1 ? last.amount - pts[0].amount : 0;
+    const changeClass = change > 0 ? 'text-green-600 bg-green-50' : change < 0 ? 'text-blue-600 bg-blue-50' : 'text-gray-600 bg-gray-50';
+
+    return (
+      <div className="w-full">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-20">
+          <path d={d} fill="none" stroke="#2563eb" strokeWidth="2" />
+          {pts.map((p, i) => {
+            const x = padding + i * step;
+            const y = height - padding - ((p.amount - min) / (range === 0 ? 1 : range)) * (height - padding * 2);
+            return <circle key={i} cx={x} cy={y} r="2" fill="#2563eb" />;
+          })}
+        </svg>
+        <div className="mt-2 flex items-center justify-between text-xs">
+          <span className="text-gray-500">Range: {formatCurrency(min)} - {formatCurrency(max)}</span>
+          <span className={`px-2 py-0.5 rounded ${changeClass}`}>Change: {formatCurrency(change)}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const renderKeyValue = (obj) => {
+    const keys = obj && typeof obj === 'object' ? Object.keys(obj) : [];
+    if (!keys || keys.length === 0) {
+      return (
+        <div className="text-sm text-gray-500">No details available</div>
+      );
+    }
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {keys.map((k) => (
+          <div key={k} className="p-3 bg-gray-50 rounded-md">
+            <div className="text-xs text-gray-500">{k}</div>
+            <div className="text-sm font-medium text-gray-800 break-words">
+              {typeof obj[k] === 'number' ? obj[k].toLocaleString() : (obj[k] === null || obj[k] === undefined ? '-' : String(obj[k]))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div className="w-full max-w-3xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200 p-6 relative">
+      <div className="mb-4">
+        <div className="flex items-start justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+          <div className="text-xs text-gray-500">{generatedAt ? `Generated ${formatDate(generatedAt)}` : ''}</div>
+        </div>
+        {metrics?.reportPeriod && (
+          <div className="mt-1 text-sm text-gray-600">{metrics.reportPeriod}</div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <div className="p-4 bg-white rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm text-gray-600">Invoices</span>
+            <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">
+              {computed.invoiceCount}
+            </span>
+          </div>
+          <div className="text-lg font-semibold text-gray-900">{computed.invoiceCount.toLocaleString()}</div>
+          <div className="text-xs text-gray-500 mt-1">Total count</div>
+        </div>
+        <div className="p-4 bg-white rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm text-gray-600">Billed</span>
+            <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 rounded">Sum</span>
+          </div>
+          <div className="text-lg font-semibold text-gray-900">{formatCurrency(computed.totalAmount)}</div>
+          <div className="text-xs text-gray-500 mt-1">Total amount</div>
+        </div>
+        <div className="p-4 bg-white rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm text-gray-600">Paid</span>
+            <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">Settled</span>
+          </div>
+          <div className="text-lg font-semibold text-gray-900">{formatCurrency(computed.paidAmount)}</div>
+          <div className="text-xs text-gray-500 mt-1">Received</div>
+        </div>
+        <div className="p-4 bg-white rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm text-gray-600">Outstanding</span>
+            <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">Open</span>
+          </div>
+          <div className="text-lg font-semibold text-gray-900">{formatCurrency(computed.outstandingAmount)}</div>
+          <div className="text-xs text-gray-500 mt-1">Overdue: {formatCurrency(computed.overdueAmount)}</div>
+        </div>
+      </div>
+
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-lg font-semibold text-gray-900">Cashflow</h4>
+          {metrics?.cashflowSummary && (
+            <span className="text-xs text-gray-500">{metrics.cashflowSummary}</span>
+          )}
+        </div>
+        <div className="p-4 bg-white rounded-lg border border-gray-200">
+          {renderSparkline()}
+        </div>
+      </div>
+
+      <div className="mb-6">
+        <h4 className="text-lg font-semibold text-gray-900 mb-3">Clients</h4>
+        {Array.isArray(clientsSummary) && clientsSummary.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {clientsSummary.map((c, idx) => {
+              const name = c.name || c.client || c.company || `Client ${idx + 1}`;
+              const totalOutstanding = Number(c.totalOutstanding || c.outstanding || 0);
+              const totalPaid = Number(c.totalPaid || c.paid || 0);
+              const count = Number(c.invoiceCount || c.count || c.invoices || 0);
+              return (
+                <div key={idx} className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:shadow-md transition-shadow duration-200">
+                  <div className="flex items-start justify-between">
+                    <div className="text-sm font-medium text-gray-900 line-clamp-1">{name}</div>
+                    <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">{isNaN(count) ? '-' : count}</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-xs text-gray-500">Outstanding</div>
+                      <div className="text-sm font-semibold text-gray-900">{formatCurrency(isNaN(totalOutstanding) ? 0 : totalOutstanding)}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">Paid</div>
+                      <div className="text-sm font-semibold text-gray-900">{formatCurrency(isNaN(totalPaid) ? 0 : totalPaid)}</div>
+                    </div>
+                  </div>
+                  {c.notes && (
+                    <div className="mt-2 text-xs text-gray-600 line-clamp-2">
+                      {String(c.notes)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">No clients to display</div>
+        )}
+      </div>
+
+      <div className="mb-6">
+        <h4 className="text-lg font-semibold text-gray-900 mb-3">Invoices</h4>
+        {Array.isArray(invoices) && invoices.length > 0 ? (
+          <div className="overflow-x-auto border border-gray-200 rounded-lg">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Issued</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {invoices.slice(0, displayOptions.maxInvoices || 10).map((inv, idx) => {
+                  const id = inv.id || inv.number || inv.reference || `#${idx + 1}`;
+                  const client = inv.client || inv.customer || inv.account || '-';
+                  const issued = inv.date || inv.issuedAt || inv.createdAt;
+                  const due = inv.dueDate || inv.due || null;
+                  const amt = Number(inv.amount || inv.total || inv.value || 0);
+                  const statusRaw = (inv.status || '').toString();
+                  const status = statusRaw || '—';
+                  const statusLower = statusRaw.toLowerCase();
+                  const statusClass = statusLower.includes('paid') ? 'bg-green-100 text-green-700' :
+                    statusLower.includes('overdue') ? 'bg-blue-100 text-blue-700' :
+                    'bg-gray-100 text-gray-700';
+                  return (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm text-gray-900">{id}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{client}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{formatDate(issued)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{formatDate(due)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(isNaN(amt) ? 0 : amt)}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={`px-2 py-0.5 rounded ${statusClass}`}>{status}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {invoices.length > (displayOptions.maxInvoices || 10) && (
+              <div className="px-4 py-2 text-xs text-gray-500 bg-gray-50">
+                Showing {displayOptions.maxInvoices || 10} of {invoices.length.toLocaleString()} invoices
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="p-4 bg-gray-50 rounded-md text-sm text-gray-600">No invoices to display</div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="p-4 bg-white rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-lg font-semibold text-gray-900">Metrics</h4>
+            {metrics?.status && (
+              <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">{String(metrics.status)}</span>
+            )}
+          </div>
+          {renderKeyValue(metrics)}
+        </div>
+        <div className="p-4 bg-white rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-lg font-semibold text-gray-900">Filters</h4>
+            {filterSummary?.label && (
+              <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded">{String(filterSummary.label)}</span>
+            )}
+          </div>
+          {renderKeyValue(filterSummary)}
+        </div>
+      </div>
+
+      <div>
+        <h4 className="text-lg font-semibold text-gray-900 mb-3">Notes</h4>
+        {Array.isArray(notes) && notes.length > 0 ? (
+          <div className="space-y-2">
+            {notes.map((n, i) => (
+              <div key={i} className="p-3 bg-gray-50 rounded-md text-sm text-gray-700">
+                {String(n)}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-600">No notes</div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// InvoiceFilters
+const InvoiceFilters = (props) => {
+  const {
+    title,
+    subtitle,
+    appliedStatus,
+    appliedClients = [],
+    appliedDateRange = {},
+    summary = {},
+    legend = [],
+    showLegend = false,
+    generatedAt,
+    notes,
+  } = props;
+
+  const getStatusBadge = (status) => {
+    const normalized = (status || '').toLowerCase();
+    if (normalized === 'paid') {
+      return { text: 'Paid', className: 'bg-green-100 text-green-700' };
+    }
+    if (normalized === 'overdue') {
+      return { text: 'Overdue', className: 'bg-blue-100 text-blue-700' };
+    }
+    if (normalized === 'unpaid') {
+      return { text: 'Unpaid', className: 'bg-gray-100 text-gray-700' };
+    }
+    return { text: 'All', className: 'bg-gray-100 text-gray-700' };
+  };
+
+  const formatDate = (value) => {
+    if (!value) {
+      return '';
+    }
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? String(value) : d.toLocaleDateString();
+  };
+
+  const extractDateRange = (range) => {
+    if (!range || typeof range !== 'object') {
+      return { from: null, to: null };
+    }
+    const from = range.start || range.from || range.since || range.begin || null;
+    const to = range.end || range.to || range.until || range.finish || null;
+    return { from, to };
+  };
+
+  const { from, to } = extractDateRange(appliedDateRange);
+
+  const clientLabel = (client, index) => {
+    if (!client || typeof client !== 'object') {
+      return `Client ${index + 1}`;
+    }
+    const name = client.name || client.title || client.company || null;
+    const secondary = client.email || client.id || client.code || null;
+    if (name && secondary) {
+      return name + ' (' + secondary + ')';
+    }
+    if (name) {
+      return name;
+    }
+    if (secondary) {
+      return String(secondary);
+    }
+    const keys = Object.keys(client);
+    if (keys.length > 0) {
+      const firstKey = keys[0];
+      return String(client[firstKey]);
+    }
+    return `Client ${index + 1}`;
+  };
+
+  const formatNumberLike = (val) => {
+    const n = Number(val);
+    if (!isNaN(n)) {
+      return n % 1 === 0 ? n.toLocaleString() : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    return String(val);
+  };
+
+  const status = getStatusBadge(appliedStatus);
+
+  const hasClients = Array.isArray(appliedClients) && appliedClients.length > 0;
+  const hasSummary = summary && typeof summary === 'object' && Object.keys(summary).length > 0;
+  const hasLegend = showLegend && Array.isArray(legend) && legend.length > 0;
+
+  return (
+    <div className="w-full max-w-2xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow duration-200">
+      {(title || subtitle) && (
+        <div className="mb-4">
+          {title && <h3 className="text-lg font-semibold text-gray-900">{title}</h3>}
+          {subtitle && <p className="text-sm text-gray-600 mt-1">{subtitle}</p>}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <span className="text-sm text-gray-600">Status:</span>
+        <span className={'px-2 py-1 text-xs font-medium rounded ' + status.className}>{status.text}</span>
+        <span className="text-gray-300">•</span>
+        <span className="text-sm text-gray-600">
+          Date range: {from ? formatDate(from) : 'Any'} {to ? '— ' + formatDate(to) : ''}
+        </span>
+      </div>
+
+      <div className="mb-4">
+        <div className="text-sm font-medium text-gray-700 mb-2">Clients</div>
+        {hasClients ? (
+          <div className="flex flex-wrap gap-2">
+            {appliedClients.map((c, idx) => (
+              <span key={idx} className="px-2 py-1 bg-gray-50 text-gray-700 text-xs rounded border border-gray-200">
+                {clientLabel(c, idx)}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-500">No clients filtered</div>
+        )}
+      </div>
+
+      <div className="mb-4">
+        <div className="text-sm font-medium text-gray-700 mb-2">Summary</div>
+        {hasSummary ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {Object.keys(summary).map((key) => {
+              const value = summary[key];
+              const display = typeof value === 'number' ? formatNumberLike(value) : String(value);
+              return (
+                <div key={key} className="p-3 bg-gray-50 rounded-md border border-gray-200">
+                  <div className="text-xs text-gray-500 mb-1">{key}</div>
+                  <div className="text-base font-semibold text-gray-900">{display}</div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-500">No summary available</div>
+        )}
+      </div>
+
+      {hasLegend && (
+        <div className="mb-4">
+          <div className="text-sm font-medium text-gray-700 mb-2">Legend</div>
+          <div className="space-y-2">
+            {legend.map((item, idx) => {
+              const label = item && typeof item === 'object' ? item.label || item.name || 'Item ' + (idx + 1) : 'Item ' + (idx + 1);
+              const color = item && typeof item === 'object' ? item.color || item.bgColor || '#e5e7eb' : '#e5e7eb';
+              const value = item && typeof item === 'object' && 'value' in item ? item.value : null;
+              const valueText = value !== null && value !== undefined ? (typeof value === 'number' ? formatNumberLike(value) : String(value)) : null;
+
+              return (
+                <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-md border border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: color }}></span>
+                    <span className="text-sm text-gray-700">{label}</span>
+                  </div>
+                  {valueText ? <span className="text-sm font-medium text-gray-900">{valueText}</span> : <span className="text-sm text-gray-500">—</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {(generatedAt || notes) && (
+        <div className="pt-3 border-t border-gray-200">
+          {generatedAt && (
+            <div className="text-xs text-gray-500">Generated: {formatDate(generatedAt)}</div>
+          )}
+          {notes && (
+            <div className="text-sm text-gray-600 mt-2 whitespace-pre-line">{notes}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+    // Component registry
+    const ComponentRegistry = {
+      InvoiceFilters: InvoiceFilters,
+      InvoiceOverviewDashboard: InvoiceOverviewDashboard
+    };
+
+    // Component renderer
+    const ComponentRenderer = ({ componentName, props }) => {
+      const Component = ComponentRegistry[componentName];
+
+      if (!Component) {
+        return (
+          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-sm text-yellow-800">Component "{componentName}" not found</p>
+          </div>
+        );
+      }
+
+      return <Component {...props} />;
+    };
+
+    // Content chunk renderer
+    const ContentChunkRenderer = ({ chunk }) => {
+      if (chunk.type === 'text') {
+        return <div className="text-gray-800 whitespace-pre-wrap">{chunk.text}</div>;
+      } else if (chunk.type === 'component') {
+        const { name, props } = chunk.component;
+        return (
+          <div className="my-4">
+            <ComponentRenderer componentName={name} props={props} />
+          </div>
+        );
+      }
+      return null;
+    };
+
+    // Message bubble
+    const MessageBubble = ({ message }) => {
+      const role = message.role;
+      const content = message.content;
+
+      if (role === 'user') {
+        return (
+          <div className="flex justify-end mb-4">
+            <div className="bg-blue-500 text-white rounded-2xl rounded-tr-sm px-4 py-2 max-w-2xl">
+              {content}
+            </div>
+          </div>
+        );
+      } else if (role === 'assistant') {
+        return (
+          <div className="flex justify-start mb-4">
+            <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 max-w-4xl shadow-sm">
+              {Array.isArray(content) ? (
+                <div className="space-y-3">
+                  {content.map((chunk, idx) => (
+                    <ContentChunkRenderer key={idx} chunk={chunk} />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-gray-800">{content}</div>
+              )}
+            </div>
+          </div>
+        );
+      } else if (role === 'tool') {
+        return (
+          <div className="flex justify-center mb-4">
+            <div className="bg-gray-100 text-gray-700 rounded-lg px-3 py-2 text-sm max-w-2xl">
+              <div className="font-medium text-gray-500 text-xs mb-1">Tool Response</div>
+              <div className="font-mono text-xs">{content}</div>
+            </div>
+          </div>
+        );
+      }
+
+      return null;
+    };
+
+    // Conversation view
+    const ConversationView = ({ conversation }) => {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
+          <div className="max-w-5xl mx-auto px-4">
+            <div className="bg-white rounded-3xl shadow-xl p-8">
+              <h1 className="text-2xl font-bold text-gray-900 mb-6">I have multiple freelance clients—help me track invoices, due dates, and payments.</h1>
+              <div className="space-y-2">
+                {conversation.map((msg, idx) => (
+                  <MessageBubble key={idx} message={msg} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // Render to DOM
+    const rootEl = document.getElementById("root");
+    if (rootEl) {
+      const root = createRoot(rootEl);
+      root.render(<ConversationView conversation={conversationData} />);
+    }
+  </script>
+</body>
+</html>

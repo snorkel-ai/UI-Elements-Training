@@ -60,17 +60,14 @@
 
 .main-content {
   flex: 1;
-  max-width: 1000px;
-  width: 100%;
+  max-width: 80%;
+  width: 80%;
   margin: 0 auto;
   padding: 2rem;
 }
 
 .main-content.example-main {
-  max-width: 80% !important;
-  width: 80% !important;
   padding: 1rem !important;
-  margin: 0 auto !important;
 }
 
 .example-page .content-section {

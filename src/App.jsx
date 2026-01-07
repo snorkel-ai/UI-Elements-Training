@@ -652,12 +652,14 @@ function ExampleComponents() {
 
   useEffect(() => {
     // Load the three files
+    const baseUrl = import.meta.env.BASE_URL || '/'
+    const basePath = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
     Promise.all([
-      fetch('/COMPLEX_content_calendar_for_newsletter/conversation.json')
+      fetch(`${basePath}COMPLEX_content_calendar_for_newsletter/conversation.json`)
         .then(res => res.text()),
-      fetch('/COMPLEX_content_calendar_for_newsletter/components.ts')
+      fetch(`${basePath}COMPLEX_content_calendar_for_newsletter/components.ts`)
         .then(res => res.text()),
-      fetch('/COMPLEX_content_calendar_for_newsletter/canvas.html')
+      fetch(`${basePath}COMPLEX_content_calendar_for_newsletter/canvas.html`)
         .then(res => res.text())
     ]).then(([conversation, components, canvas]) => {
       setFileContents({

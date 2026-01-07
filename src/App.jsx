@@ -649,17 +649,21 @@ function ExampleComponents() {
   })
   const [parsedJSON, setParsedJSON] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [basePath, setBasePath] = useState('/')
 
   useEffect(() => {
-    // Load the three files
+    // Get base path for GitHub Pages
     const baseUrl = import.meta.env.BASE_URL || '/'
-    const basePath = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
+    const path = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
+    setBasePath(path)
+    
+    // Load the three files
     Promise.all([
-      fetch(`${basePath}COMPLEX_content_calendar_for_newsletter/conversation.json`)
+      fetch(`${path}COMPLEX_content_calendar_for_newsletter/conversation.json`)
         .then(res => res.text()),
-      fetch(`${basePath}COMPLEX_content_calendar_for_newsletter/components.ts`)
+      fetch(`${path}COMPLEX_content_calendar_for_newsletter/components.ts`)
         .then(res => res.text()),
-      fetch(`${basePath}COMPLEX_content_calendar_for_newsletter/canvas.html`)
+      fetch(`${path}COMPLEX_content_calendar_for_newsletter/canvas.html`)
         .then(res => res.text())
     ]).then(([conversation, components, canvas]) => {
       setFileContents({
@@ -732,7 +736,7 @@ function ExampleComponents() {
               <h3>canvas.html</h3>
             </div>
             <iframe
-              src="/COMPLEX_content_calendar_for_newsletter/canvas.html"
+              src={`${basePath}COMPLEX_content_calendar_for_newsletter/canvas.html`}
               className="canvas-iframe"
               title="Canvas HTML Preview"
             />
